@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../license_service.dart';
 import '../purchase_service.dart';
+import 'redeem_code_dialog.dart';
 
 /// Zeigt die Paywall. Schließt sich automatisch, sobald freigeschaltet wurde.
 Future<void> showPaywall(BuildContext context) {
@@ -83,8 +84,8 @@ class _PaywallDialogState extends State<PaywallDialog> {
       actionsAlignment: MainAxisAlignment.spaceBetween,
       actions: [
         TextButton(
-          onPressed: _busy ? null : () => PurchaseService.instance.restore(),
-          child: const Text('Wiederherstellen'),
+          onPressed: _busy ? null : () => showRedeemCodeDialog(context),
+          child: const Text('Code einlösen'),
         ),
         Row(
           mainAxisSize: MainAxisSize.min,

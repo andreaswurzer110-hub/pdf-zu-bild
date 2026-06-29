@@ -11,6 +11,8 @@ class LicenseService extends ChangeNotifier {
   static final LicenseService instance = LicenseService._();
 
   static const int freeLimit = 5;
+  /// Freischalt-Code (z. B. zum Testen oder für Linux-Käufer).
+  static const String unlockCode = 'Hallo123';
   static const String _kCount = 'conversion_count';
   static const String _kPro = 'is_pro';
 
@@ -52,6 +54,15 @@ class LicenseService extends ChangeNotifier {
     final sp = await SharedPreferences.getInstance();
     await sp.setBool(_kPro, true);
     notifyListeners();
+  }
+
+  /// Freischalt-Code prüfen. Bei Erfolg wird die Vollversion aktiviert.
+  Future<bool> redeemCode(String code) async {
+    if (code.trim() == unlockCode) {
+      await unlockPro();
+      return true;
+    }
+    return false;
   }
 
   /// Nur für Tests/Support: Zähler zurücksetzen.

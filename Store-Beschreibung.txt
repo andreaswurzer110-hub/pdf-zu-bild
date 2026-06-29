@@ -1,0 +1,62 @@
+==================================================
+ STORE-TEXTE – PDF zu Bild
+==================================================
+
+App-Name:     PDF zu Bild
+Snap-Name:    pdf-zu-bild-und-reader
+App-ID:       at.aw.pdfzubild
+Datenschutz:  https://andreaswurzer110-hub.github.io/pdf-zu-bild/
+Kontakt:      andi-w-apps@tuta.com
+
+
+--------------------------------------------------
+ KURZBESCHREIBUNG (Google Play, max. 80 Zeichen)
+--------------------------------------------------
+PDF in scharfe Bilder umwandeln, Bilder als PDF speichern & PDFs lesen.
+
+
+--------------------------------------------------
+ ZUSAMMENFASSUNG (Snap "summary", 1 Zeile)
+--------------------------------------------------
+PDF zu Bild umwandeln, scannen und PDFs lesen - schnell, lokal, in hoher Qualitaet.
+
+
+--------------------------------------------------
+ VOLLSTAENDIGE BESCHREIBUNG (Google Play / Microsoft Store)
+--------------------------------------------------
+PDF zu Bild wandelt in beide Richtungen um - schnell, in hoher Qualitaet und
+komplett auf deinem Geraet. Keine Anmeldung, keine Cloud, keine Werbung.
+
+PDF -> Bild
+- Alle oder einzelne Seiten in PNG oder JPEG umwandeln
+- Aufloesung frei waehlbar - Standard 300 DPI fuer gestochen scharfen Text
+- Ideal zum Versenden ueber WhatsApp & Co.
+- Am PC einfach per Drag & Drop
+
+Bild -> PDF
+- Mehrere Bilder oder Fotos (Kamera) zu einem PDF zusammenfuegen
+- Seiten sortieren und zuschneiden
+- Darstellung: Original, Schwarz-Weiss oder "Scan" (wie eingescannt)
+
+PDF-Reader
+- PDFs direkt oeffnen und mit Zoom lesen
+- Oben bequem zwischen den Funktionen umschalten
+
+Die ersten 5 Umwandlungen sind kostenlos. Danach schaltest du mit einem
+einmaligen Kauf die unbegrenzte Vollversion frei - einmal zahlen, dauerhaft
+nutzen.
+
+Verfuegbar fuer Android, Windows und Linux.
+
+
+--------------------------------------------------
+ NEUIGKEITEN / RELEASE NOTES (Version 1.0.0)
+--------------------------------------------------
+Erste Veroeffentlichung: PDF -> Bild, Bild -> PDF (mit Zuschneiden und
+Scan-Modus) und PDF-Reader.
+
+
+--------------------------------------------------
+ SCHLAGWOERTER / TAGS
+--------------------------------------------------
+pdf, bild, konverter, scanner, png, jpeg, pdf reader, dokument, scan, umwandeln

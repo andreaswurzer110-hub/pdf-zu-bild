@@ -25,11 +25,14 @@ if (-not (Test-Path $msix)) {
     Read-Host "Enter zum Schliessen"; exit 1
 }
 
-Write-Host "1/2  Test-Zertifikat wird vertraut..." -ForegroundColor Cyan
+Write-Host "1/3  Test-Zertifikat wird vertraut..." -ForegroundColor Cyan
 Import-Certificate -FilePath $cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople | Out-Null
 
-Write-Host "2/2  App wird installiert..." -ForegroundColor Cyan
-Add-AppxPackage -Path $msix
+Write-Host "2/3  Eventuelle alte Version wird entfernt..." -ForegroundColor Cyan
+Get-AppxPackage *pdfzubild* | Remove-AppxPackage -ErrorAction SilentlyContinue
+
+Write-Host "3/3  App wird installiert..." -ForegroundColor Cyan
+Add-AppxPackage -Path $msix -ForceApplicationShutdown
 
 Write-Host ""
 Write-Host "Fertig! 'PDF zu Bild' ist jetzt im Startmenue." -ForegroundColor Green
