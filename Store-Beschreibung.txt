@@ -1,4 +1,4 @@
-==================================================
+﻿==================================================
  STORE-TEXTE – PDF zu Bild
 ==================================================
 
@@ -18,45 +18,45 @@ PDF in scharfe Bilder umwandeln, Bilder als PDF speichern & PDFs lesen.
 --------------------------------------------------
  ZUSAMMENFASSUNG (Snap "summary", 1 Zeile)
 --------------------------------------------------
-PDF zu Bild umwandeln, scannen und PDFs lesen - schnell, lokal, in hoher Qualitaet.
+PDF zu Bild umwandeln, scannen und PDFs lesen – schnell, lokal, in hoher Qualität.
 
 
 --------------------------------------------------
- VOLLSTAENDIGE BESCHREIBUNG (Google Play / Microsoft Store)
+ VOLLSTÄNDIGE BESCHREIBUNG (Google Play / Microsoft Store)
 --------------------------------------------------
-PDF zu Bild wandelt in beide Richtungen um - schnell, in hoher Qualitaet und
-komplett auf deinem Geraet. Keine Anmeldung, keine Cloud, keine Werbung.
+PDF zu Bild wandelt in beide Richtungen um – schnell, in hoher Qualität und
+komplett auf deinem Gerät. Keine Anmeldung, keine Cloud, keine Werbung.
 
-PDF -> Bild
+PDF → Bild
 - Alle oder einzelne Seiten in PNG oder JPEG umwandeln
-- Aufloesung frei waehlbar - Standard 300 DPI fuer gestochen scharfen Text
-- Ideal zum Versenden ueber WhatsApp & Co.
+- Auflösung frei wählbar – Standard 300 DPI für gestochen scharfen Text
+- Ideal zum Versenden über WhatsApp & Co.
 - Am PC einfach per Drag & Drop
 
-Bild -> PDF
-- Mehrere Bilder oder Fotos (Kamera) zu einem PDF zusammenfuegen
+Bild → PDF
+- Mehrere Bilder oder Fotos (Kamera) zu einem PDF zusammenfügen
 - Seiten sortieren und zuschneiden
-- Darstellung: Original, Schwarz-Weiss oder "Scan" (wie eingescannt)
+- Darstellung: Original, Schwarz-Weiß oder "Scan" (wie eingescannt)
 
 PDF-Reader
-- PDFs direkt oeffnen und mit Zoom lesen
+- PDFs direkt öffnen und mit Zoom lesen
 - Oben bequem zwischen den Funktionen umschalten
 
 Die ersten 5 Umwandlungen sind kostenlos. Danach schaltest du mit einem
-einmaligen Kauf die unbegrenzte Vollversion frei - einmal zahlen, dauerhaft
+einmaligen Kauf die unbegrenzte Vollversion frei – einmal zahlen, dauerhaft
 nutzen.
 
-Verfuegbar fuer Android, Windows und Linux.
+Verfügbar für Android, Windows und Linux.
 
 
 --------------------------------------------------
- NEUIGKEITEN / RELEASE NOTES (Version 1.0.0)
+ NEUIGKEITEN / RELEASE NOTES (Version 1.0.1.0)
 --------------------------------------------------
-Erste Veroeffentlichung: PDF -> Bild, Bild -> PDF (mit Zuschneiden und
-Scan-Modus) und PDF-Reader.
+PDF → Bild, Bild → PDF (mit Zuschneiden und Scan-Modus), PDF-Reader,
+Bildanzeige und Öffnen-Funktion.
 
 
 --------------------------------------------------
- SCHLAGWOERTER / TAGS
+ SCHLAGWÖRTER / TAGS
 --------------------------------------------------
 pdf, bild, konverter, scanner, png, jpeg, pdf reader, dokument, scan, umwandeln
