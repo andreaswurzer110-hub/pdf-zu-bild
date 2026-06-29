@@ -64,31 +64,5 @@ jobs:
           name: pdf-zu-bild-linux
           path: pdf-zu-bild-linux-x64.tar.gz
 
-  # --------------------------------------------------------------- Android
-  android:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-
-      - name: Abhängigkeiten holen
-        run: flutter pub get
-
-      - name: APK bauen
-        run: flutter build apk --release
-
-      - name: APK-Artefakt anhängen
-        uses: actions/upload-artifact@v4
-        with:
-          name: pdf-zu-bild-android
-          path: build/app/outputs/flutter-apk/app-release.apk
+  # Android & Windows werden lokal gebaut (siehe README). Der Store-Upload
+  # (Play/MS Store/Snap) wird separat eingerichtet, wenn der App-Kern steht.
