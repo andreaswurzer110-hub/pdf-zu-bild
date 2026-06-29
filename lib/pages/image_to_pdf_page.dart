@@ -40,6 +40,7 @@ class _ImageToPdfPageState extends State<ImageToPdfPage> {
   bool _busy = false;
   String _statusText = '';
   String? _resultPdfPath;
+  String? _outputDir;
 
   bool get _isMobile => Platform.isAndroid || Platform.isIOS;
   bool get _isDesktop =>
@@ -116,22 +117,31 @@ class _ImageToPdfPageState extends State<ImageToPdfPage> {
 
       setState(() => _statusText = 'PDF wird erstellt …');
       final pdfBytes = await buildPdfFromImages(processed);
-
-      // In temporäre Datei schreiben (zum Teilen/Speichern).
-      final dir = await getTemporaryDirectory();
       final stamp = DateTime.now().millisecondsSinceEpoch;
-      final tmpPath = p.join(dir.path, 'Dokument_$stamp.pdf');
-      await File(tmpPath).writeAsBytes(pdfBytes);
 
       await LicenseService.instance.registerConversion();
-      setState(() {
-        _resultPdfPath = tmpPath;
-        _statusText =
-            '✓ PDF mit ${processed.length} Seite(n) erstellt.';
-      });
 
-      // Auf dem Desktop direkt „Speichern unter…" anbieten.
-      if (_isDesktop) await _saveAs(pdfBytes);
+      if (_outputDir != null) {
+        // In den gewählten Zielordner speichern.
+        final outPath = p.join(_outputDir!, 'Dokument_$stamp.pdf');
+        await File(outPath).writeAsBytes(pdfBytes);
+        setState(() {
+          _resultPdfPath = outPath;
+          _statusText = '✓ PDF mit ${processed.length} Seite(n) '
+              'gespeichert in:\n$_outputDir';
+        });
+      } else {
+        // Kein Zielordner: temporär ablegen (zum Teilen) …
+        final dir = await getTemporaryDirectory();
+        final tmpPath = p.join(dir.path, 'Dokument_$stamp.pdf');
+        await File(tmpPath).writeAsBytes(pdfBytes);
+        setState(() {
+          _resultPdfPath = tmpPath;
+          _statusText = '✓ PDF mit ${processed.length} Seite(n) erstellt.';
+        });
+        // … und auf dem Desktop direkt „Speichern unter…" anbieten.
+        if (_isDesktop) await _saveAs(pdfBytes);
+      }
     } catch (e) {
       _showError('Fehler beim Erstellen: $e');
       setState(() => _statusText = 'Abgebrochen wegen Fehler.');
@@ -160,6 +170,23 @@ class _ImageToPdfPageState extends State<ImageToPdfPage> {
     } catch (e) {
       _showError('Speichern nicht möglich: $e');
     }
+  }
+
+  Future<void> _pickOutputDir() async {
+    final dir = await FilePicker.platform.getDirectoryPath();
+    if (dir != null) setState(() => _outputDir = dir);
+  }
+
+  Future<void> _openOutputFolder() async {
+    final dir = _outputDir;
+    if (dir == null) return;
+    try {
+      if (Platform.isWindows) {
+        await Process.run('explorer', [dir]);
+      } else if (Platform.isLinux) {
+        await Process.run('xdg-open', [dir]);
+      }
+    } catch (_) {}
   }
 
   Future<void> _share() async {
@@ -328,6 +355,28 @@ class _ImageToPdfPageState extends State<ImageToPdfPage> {
                   ],
                 ),
               ),
+            if (_items.isNotEmpty)
+              _Card(
+                title: '4. Zielordner',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : _pickOutputDir,
+                      icon: const Icon(Icons.folder_open),
+                      label: const Text('Ordner wählen'),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _outputDir ??
+                          (_isDesktop
+                              ? 'Standard: wird beim Speichern gefragt'
+                              : 'Standard: über „Teilen" weitergeben'),
+                      style: TextStyle(fontSize: 12, color: scheme.outline),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 8),
             FilledButton.icon(
               onPressed: (_items.isNotEmpty && !_busy) ? _createPdf : null,
@@ -357,27 +406,37 @@ class _ImageToPdfPageState extends State<ImageToPdfPage> {
             ],
             if (_resultPdfPath != null && !_busy) ...[
               const SizedBox(height: 16),
-              Row(children: [
-                Expanded(
-                  child: FilledButton.tonalIcon(
-                    onPressed: _share,
-                    icon: const Icon(Icons.share),
-                    label: const Text('Teilen / WhatsApp'),
-                  ),
+              FilledButton.tonalIcon(
+                onPressed: _share,
+                style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(46)),
+                icon: const Icon(Icons.share),
+                label: const Text('Teilen / WhatsApp'),
+              ),
+              if (_isDesktop) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final bytes =
+                            await File(_resultPdfPath!).readAsBytes();
+                        await _saveAs(bytes);
+                      },
+                      icon: const Icon(Icons.save_alt),
+                      label: const Text('Speichern unter…'),
+                    ),
+                    if (_outputDir != null)
+                      OutlinedButton.icon(
+                        onPressed: _openOutputFolder,
+                        icon: const Icon(Icons.folder),
+                        label: const Text('Ordner öffnen'),
+                      ),
+                  ],
                 ),
-                if (_isDesktop) ...[
-                  const SizedBox(width: 12),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final bytes =
-                          await File(_resultPdfPath!).readAsBytes();
-                      await _saveAs(bytes);
-                    },
-                    icon: const Icon(Icons.save_alt),
-                    label: const Text('Speichern unter…'),
-                  ),
-                ],
-              ]),
+              ],
             ],
           ],
         ),

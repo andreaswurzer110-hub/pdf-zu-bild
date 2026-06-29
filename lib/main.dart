@@ -1,11 +1,13 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import 'app_mode.dart';
 import 'license_service.dart';
 import 'opened_file.dart';
 import 'purchase_service.dart';
 import 'pages/image_to_pdf_page.dart';
+import 'pages/image_viewer_page.dart';
 import 'pages/pdf_reader_page.dart';
 import 'pages/pdf_to_image_page.dart';
 import 'widgets/mode_toggle.dart';
@@ -76,18 +78,24 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
-  /// PDF auswählen und im Reader öffnen.
-  Future<void> _openInReader() async {
+  /// Datei öffnen: PDF → Reader, Bild → Bildanzeige.
+  Future<void> _openFile() async {
     final res = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['pdf'],
+      allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'],
     );
     final path = res?.files.single.path;
-    if (path != null) {
+    if (path == null) return;
+
+    if (p.extension(path).toLowerCase() == '.pdf') {
       setState(() {
         _readerPath = path;
         _view = _View.reader;
       });
+    } else if (mounted) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => ImageViewerPage(path: path)),
+      );
     }
   }
 
@@ -130,11 +138,6 @@ class _AppShellState extends State<AppShell> {
         foregroundColor: scheme.onPrimary,
         title: ModeToggle(mode: _toggleMode, onChanged: _onModeChanged),
         actions: [
-          IconButton(
-            tooltip: 'PDF im Reader öffnen',
-            icon: const Icon(Icons.menu_book),
-            onPressed: _openInReader,
-          ),
           ListenableBuilder(
             listenable: LicenseService.instance,
             builder: (context, _) {
@@ -164,6 +167,22 @@ class _AppShellState extends State<AppShell> {
         ],
       ),
       body: SafeArea(child: body),
+      // Unten: Datei öffnen (PDF → Reader, Bild → Anzeige). In den Umwandel-Modi.
+      bottomNavigationBar: _view == _View.reader
+          ? null
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+                child: OutlinedButton.icon(
+                  onPressed: _openFile,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(46),
+                  ),
+                  icon: const Icon(Icons.folder_open),
+                  label: const Text('Öffnen (PDF im Reader / Bild anzeigen)'),
+                ),
+              ),
+            ),
     );
   }
 }

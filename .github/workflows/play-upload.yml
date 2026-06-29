@@ -1,0 +1,75 @@
+# Lädt eine an ein GitHub-Release angehängte AAB automatisch zu Google Play
+# (Standard: interner Test). Die Signierung bleibt dabei LOKAL – du/ich baust
+# die AAB lokal und hängst sie ans Release; nur das Hochladen passiert hier.
+#
+# AUSLÖSER
+#   - Ein veröffentlichtes GitHub-Release mit der *.aab als Anhang, z. B.:
+#       gh release create v1.0.0 build/app/outputs/bundle/release/app-release.aab \
+#         --title v1.0.0 --notes "Erste interne Testversion"
+#   - oder manuell (workflow_dispatch) mit Angabe des Tags.
+#
+# OHNE das Secret PLAY_SERVICE_ACCOUNT_JSON wird der Upload übersprungen
+# (kein Fehlschlag) – so kann man es schrittweise scharf schalten.
+#
+# EINMALIGE VORAUSSETZUNGEN (in deinem Google-Konto):
+#   1. App "PDF zu Bild" (Paket at.aw.pdfzubild) in der Play Console anlegen
+#      und die ERSTE Version einmal manuell hochladen.
+#   2. Dem Service-Account (wie bei Notizblock) Zugriff auf diese App geben.
+#   3. Repo-Secret PLAY_SERVICE_ACCOUNT_JSON setzen (derselbe JSON wie Notizblock).
+
+name: Play-Upload
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release-Tag mit der AAB (z. B. v1.0.0)'
+        required: true
+      track:
+        description: 'Play-Track (internal/alpha/beta/production)'
+        required: false
+        default: internal
+
+env:
+  REL_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+concurrency:
+  group: play-upload-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  play:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Secret vorhanden?
+        id: creds
+        env:
+          C: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -n "$C" ]; then
+            echo "has=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "PLAY_SERVICE_ACCOUNT_JSON fehlt -> Google Play wird übersprungen."
+            echo "has=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: AAB aus dem Release holen
+        if: steps.creds.outputs.has == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$REL_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern '*.aab' --dir dist
+          ls -l dist
+
+      - name: Nach Google Play hochladen
+        if: steps.creds.outputs.has == 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: at.aw.pdfzubild
+          releaseFiles: dist/*.aab
+          track: ${{ inputs.track || 'internal' }}
+          status: completed
