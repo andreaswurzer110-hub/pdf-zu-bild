@@ -7,6 +7,9 @@ import 'package:path/path.dart' as p;
 import 'package:pdfx/pdfx.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../license_service.dart';
+import '../usage_gate.dart';
+
 enum OutputFormat { png, jpeg }
 
 /// Modus „PDF → Bild": wandelt PDF-Seiten in PNG/JPEG um.
@@ -128,6 +131,10 @@ class _PdfToImagePageState extends State<PdfToImagePage> {
       }
     }
 
+    // Gratis-Kontingent prüfen (Paywall, falls aufgebraucht).
+    if (!mounted) return;
+    if (!await ensureCanConvert(context)) return;
+
     final outDir = _outputDir ?? p.dirname(_pdfPath!);
     final baseName = p.basenameWithoutExtension(_pdfPath!);
     final isPng = _format == OutputFormat.png;
@@ -169,6 +176,7 @@ class _PdfToImagePageState extends State<PdfToImagePage> {
         _resultFiles.add(outPath);
         setState(() => _progress = (idx + 1) / targetPages.length);
       }
+      await LicenseService.instance.registerConversion();
       setState(() => _statusText =
           '✓ Fertig: ${_resultFiles.length} Bild(er) in:\n$outDir');
     } catch (e) {
@@ -442,6 +450,7 @@ class _PdfToImagePageState extends State<PdfToImagePage> {
               : const Icon(Icons.auto_awesome),
           label: Text(_busy ? 'Wird umgewandelt …' : 'Umwandeln'),
         ),
+        const RemainingFreeBadge(),
         if (_busy) ...[
           const SizedBox(height: 12),
           LinearProgressIndicator(value: _progress),

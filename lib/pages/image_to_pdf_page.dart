@@ -9,7 +9,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../image_processing.dart';
+import '../license_service.dart';
 import '../pdf_builder.dart';
+import '../usage_gate.dart';
 import 'crop_page.dart';
 
 /// Ein Bild in der Liste (Original + optional zugeschnittene Variante).
@@ -90,6 +92,10 @@ class _ImageToPdfPageState extends State<ImageToPdfPage> {
 
   Future<void> _createPdf() async {
     if (_items.isEmpty) return;
+
+    // Gratis-Kontingent prüfen (Paywall, falls aufgebraucht).
+    if (!await ensureCanConvert(context)) return;
+
     setState(() {
       _busy = true;
       _statusText = 'Bilder werden aufbereitet …';
@@ -117,6 +123,7 @@ class _ImageToPdfPageState extends State<ImageToPdfPage> {
       final tmpPath = p.join(dir.path, 'Dokument_$stamp.pdf');
       await File(tmpPath).writeAsBytes(pdfBytes);
 
+      await LicenseService.instance.registerConversion();
       setState(() {
         _resultPdfPath = tmpPath;
         _statusText =
@@ -335,6 +342,7 @@ class _ImageToPdfPageState extends State<ImageToPdfPage> {
                   : const Icon(Icons.picture_as_pdf),
               label: Text(_busy ? 'Wird erstellt …' : 'Als PDF erstellen'),
             ),
+            const RemainingFreeBadge(),
             if (_statusText.isNotEmpty) ...[
               const SizedBox(height: 12),
               Container(

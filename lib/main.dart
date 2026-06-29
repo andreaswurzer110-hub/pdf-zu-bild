@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'app_mode.dart';
+import 'license_service.dart';
 import 'opened_file.dart';
+import 'purchase_service.dart';
 import 'pages/image_to_pdf_page.dart';
 import 'pages/pdf_reader_page.dart';
 import 'pages/pdf_to_image_page.dart';
@@ -9,6 +11,10 @@ import 'widgets/mode_toggle.dart';
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Lizenz-/Kauf-Status laden (Gratis-Zähler, Vollversion).
+  await LicenseService.instance.init();
+  await PurchaseService.instance.init();
 
   // Per „Öffnen mit" übergebene PDF ermitteln (Desktop: Argumente, Android: Channel).
   String? openedPdf = OpenedFile.fromArgs(args);
