@@ -58,6 +58,7 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
+  msix: ^3.18.0
 
 # App-Icon für alle Plattformen aus assets/icon erzeugen:
 #   dart run flutter_launcher_icons
@@ -70,6 +71,26 @@ flutter_launcher_icons:
     generate: true
     image_path: "assets/icon/app_icon.png"
     icon_size: 256
+
+# MSIX-Paket bauen:
+#   flutter build windows --release
+#   dart run msix:create        (Test-Paket, selbst signiert – zum lokalen Testen)
+# Für den echten Microsoft Store später: identity_name/publisher aus dem
+# Partner Center eintragen und mit --store bauen.
+msix_config:
+  display_name: PDF zu Bild
+  publisher_display_name: Andreas Wurzer
+  identity_name: at.aw.pdfzubild
+  publisher: CN=Andreas Wurzer
+  msix_version: 1.0.0.0
+  logo_path: assets/icon/app_icon.png
+  file_extension: .pdf
+  capabilities: ""
+  architecture: x64
+  # Selbst signiertes Test-Zertifikat (nur zum lokalen Testen; nicht im Store).
+  certificate_path: certs/test_cert.pfx
+  certificate_password: pdfzubild
+  install_certificate: false
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

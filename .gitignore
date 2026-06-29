@@ -47,3 +47,12 @@ app.*.map.json
 # Gradle/Android build outputs
 android/build/
 android/.gradle/
+
+# Lokale Test-Zertifikate (nicht teilen!)
+certs/
+
+# Android Signatur (geheim! sichern, nicht teilen)
+android/key.properties
+android/upload-keystore.jks
+*.jks
+*.keystore
