@@ -1,14 +1,27 @@
 # PDF zu Bild
 
-Wandelt PDF-Seiten in scharfe Bilder (PNG/JPEG) um – für Android, Windows und Linux.
-Gebaut mit Flutter, Rendering über pdfium (`pdfx`).
+Konvertiert in beide Richtungen – für Android, Windows und Linux.
+Gebaut mit Flutter, PDF-Rendering über pdfium (`pdfx`). App-ID: `at.aw.pdfzubild`.
 
-## Funktionen
-- PDF auswählen, einzelne oder alle Seiten umwandeln
+Oben im Titel schaltet der Umschalter **PDF ⇄ Bild** zwischen den zwei Modi um.
+
+## Modus „PDF → Bild"
+- PDF auswählen (oder auf dem Desktop per **Drag & Drop** hineinziehen)
+- einzelne oder alle Seiten umwandeln
 - **DPI frei einstellbar, Standard 300** (Schieberegler + Eingabefeld, Schnellwahl 150/300/400/600)
 - Format **PNG** (verlustfrei) oder **JPEG** (kleiner) wählbar
-- Zielordner wählbar (Standard: gleicher Ordner wie das PDF)
-- **Teilen / WhatsApp** über das System-Teilen-Menü, plus „Ordner öffnen"
+- Zielordner wählbar; **Teilen / WhatsApp** + „Ordner öffnen"
+
+## Modus „Bild → PDF"
+- Bilder wählen oder (auf dem Handy) **Kamera** nutzen
+- Seiten **sortieren** und einzeln **zuschneiden**
+- Darstellung: **Original**, **Schwarz-Weiß** oder **Scan** (sieht eingescannt aus)
+- als PDF speichern / teilen
+
+## PDF-Reader
+- Per **„Öffnen mit"** eine PDF an die App geben → sie öffnet im Reader (mit Zoom).
+- Oben der Umschalter führt direkt in den jeweiligen Modus.
+- Technik: Desktop über Kommandozeilen-Argument, Android über VIEW-Intent.
 
 ## Qualität / DPI
 PDF-Text ist vektorbasiert und hat keine feste Auflösung. Richtwerte:
@@ -34,13 +47,21 @@ Ergebnis: `build\windows\x64\runner\Release\` – der **gesamte Ordner** ist die
 (die `.exe` braucht die DLLs und den `data`-Ordner daneben). Zum Weitergeben den
 ganzen Ordner kopieren oder zippen.
 
-## Android-Version bauen (später)
+## Android-Version bauen (lokal)
 ```powershell
-flutter build apk --release
+flutter build apk --release      # APK zum direkten Installieren
+flutter build appbundle --release  # AAB für den Play Store
 ```
-Ergebnis: `build\app\outputs\flutter-apk\app-release.apk`
+Ergebnis: `build\app\outputs\flutter-apk\app-release.apk` bzw.
+`build\app\outputs\bundle\release\app-release.aab`.
 
-## Linux-Version bauen (auf einem Linux-Rechner)
+> Hinweis: `android/build.gradle.kts` erzwingt projektweit **compileSdk 36**,
+> weil einige Plugins (file_picker, image_picker) das verlangen.
+
+## Linux-Version bauen
+Läuft automatisch in der Cloud über **GitHub Actions** (`.github/workflows/build.yml`):
+bei jedem Push nach `main` oder per „Run workflow". Das Ergebnis hängt als Artefakt
+`pdf-zu-bild-linux` (`.tar.gz`) am Workflow-Lauf. Lokal auf einem Linux-Rechner:
 ```bash
 flutter config --enable-linux-desktop
 flutter build linux --release

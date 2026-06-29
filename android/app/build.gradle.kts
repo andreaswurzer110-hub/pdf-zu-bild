@@ -6,7 +6,8 @@ plugins {
 
 android {
     namespace = "at.aw.pdfzubild"
-    compileSdk = flutter.compileSdkVersion
+    // Einige Plugins (z. B. image_picker) verlangen mindestens compileSdk 36.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
