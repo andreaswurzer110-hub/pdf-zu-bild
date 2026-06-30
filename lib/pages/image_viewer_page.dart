@@ -2,10 +2,17 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
+import 'package:photo_view/photo_view.dart';
+import 'package:photo_view/photo_view_gallery.dart';
 
 /// Bildanzeige mit Zoom/Verschieben (für den „Öffnen"-Button). Bei mehreren
 /// Pfaden (z. B. alle Seiten einer umgewandelten PDF) kann zwischen den
 /// Bildern geblättert werden.
+///
+/// Nutzt [PhotoViewGallery] statt eines eigenen `PageView`+`InteractiveViewer`:
+/// Beide Gesten (Wischen zum Blättern, Pinch zum Zoomen) konkurrieren sonst um
+/// dieselben Pointer-Events, was auf Android dazu führte, dass Zoomen entweder
+/// gar nicht reagierte oder stattdessen die nächste Seite aufgerufen wurde.
 class ImageViewerPage extends StatefulWidget {
   const ImageViewerPage({
     super.key,
@@ -77,20 +84,20 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
               ]
             : null,
       ),
-      body: PageView.builder(
-        controller: _controller,
+      body: PhotoViewGallery.builder(
+        pageController: _controller,
         itemCount: widget.paths.length,
         onPageChanged: (i) => setState(() => _index = i),
-        itemBuilder: (context, i) => Center(
-          child: InteractiveViewer(
-            minScale: 0.5,
-            maxScale: 6,
-            child: Image.file(
-              File(widget.paths[i]),
-              errorBuilder: (_, _, _) => const Text(
-                'Bild konnte nicht geladen werden.',
-                style: TextStyle(color: Colors.white),
-              ),
+        backgroundDecoration: const BoxDecoration(color: Colors.black),
+        builder: (context, i) => PhotoViewGalleryPageOptions(
+          imageProvider: FileImage(File(widget.paths[i])),
+          minScale: PhotoViewComputedScale.contained * 0.8,
+          maxScale: PhotoViewComputedScale.covered * 4,
+          initialScale: PhotoViewComputedScale.contained,
+          errorBuilder: (context, error, stackTrace) => const Center(
+            child: Text(
+              'Bild konnte nicht geladen werden.',
+              style: TextStyle(color: Colors.white),
             ),
           ),
         ),
