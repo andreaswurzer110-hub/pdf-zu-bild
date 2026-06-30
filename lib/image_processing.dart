@@ -33,26 +33,47 @@ Uint8List processImage(Uint8List input, ColorMode mode, {int jpegQuality = 90}) 
   return img.encodeJpg(out, quality: jpegQuality);
 }
 
-/// „Eingescannt"-Look: Graustufen, Kontrast anheben, Hintergrund aufhellen,
-/// damit Papier weiß und Text kräftig wirkt.
+/// „Eingescannt"-Look wie von einem echten Flachbett-Scanner:
+/// gleichmäßig weißes Papier (Schatten/ungleiches Licht raus), kräftiger,
+/// scharfer Text. Kernstück ist die Beleuchtungs-Korrektur (Flat-Field):
+/// Das Foto wird durch seinen eigenen, stark unscharfen „Hintergrund" geteilt,
+/// wodurch ungleichmäßige Ausleuchtung verschwindet und Papier sauber weiß wird.
 img.Image _scanLook(img.Image src) {
-  var im = img.grayscale(src);
-  // Helligkeit/Kontrast anheben.
-  im = img.adjustColor(im, contrast: 1.35, brightness: 1.05);
-  // Tonwerte spreizen.
-  im = img.normalize(im, min: 0, max: 255);
+  final gray = img.grayscale(src);
+  final w = gray.width;
+  final h = gray.height;
 
-  // Weißpunkt hochziehen: helle Bereiche zu reinem Weiß, dunkle abdunkeln.
-  const whiteCut = 175; // ab hier -> Papierweiß
-  const blackBoost = 90; // darunter -> kräftig dunkler
-  for (final p in im) {
-    final l = p.luminance.toInt();
-    if (l >= whiteCut) {
-      p.setRgb(255, 255, 255);
-    } else if (l <= blackBoost) {
-      final v = (l * 0.6).round();
-      p.setRgb(v, v, v);
+  // 1. Beleuchtung schätzen: stark verkleinern (Mittelung), glätten, wieder
+  //    hochskalieren. Das ergibt den lokalen Papier-/Lichthintergrund.
+  final smallW = (w ~/ 8).clamp(1, w);
+  final smallH = (h ~/ 8).clamp(1, h);
+  var bg = img.copyResize(gray,
+      width: smallW, height: smallH, interpolation: img.Interpolation.average);
+  bg = img.gaussianBlur(bg, radius: 3);
+  bg = img.copyResize(bg,
+      width: w, height: h, interpolation: img.Interpolation.linear);
+
+  // 2. Flat-Field-Division + Tonwertkurve.
+  //    ratio = Pixel / Hintergrund  (Papier ≈ 1 → weiß, Text < 1 → dunkel)
+  const blackPoint = 0.50; // Verhältnis darunter → reines Schwarz
+  const whitePoint = 0.93; // Verhältnis darüber → reines Papierweiß
+  final out = img.Image(width: w, height: h);
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      final g = gray.getPixel(x, y).luminance.toDouble();
+      final b = bg.getPixel(x, y).luminance.toDouble();
+      final ratio = b <= 1 ? 1.0 : (g / b);
+
+      var t = (ratio - blackPoint) / (whitePoint - blackPoint);
+      if (t < 0) t = 0;
+      if (t > 1) t = 1;
+      // Weiche S-Kurve (smoothstep): Text satt, Papier sauber, Kanten weich.
+      final v = (255.0 * (t * t * (3 - 2 * t))).round();
+      out.setPixelRgb(x, y, v, v, v);
     }
   }
-  return im;
+
+  // 3. Leichtes Schärfen – wie der feine Kontrast eines echten Scanners.
+  return img.convolution(out,
+      filter: [0, -1, 0, -1, 5, -1, 0, -1, 0], div: 1, offset: 0);
 }

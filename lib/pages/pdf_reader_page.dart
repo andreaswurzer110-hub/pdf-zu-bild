@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdfx/pdfx.dart';
@@ -23,6 +24,8 @@ class _PdfReaderPageState extends State<PdfReaderPage> {
   PdfControllerPinch? _ctrlPinch;
   int _page = 1;
   int _total = 0;
+  // Throttle fürs Mausrad (sonst blättert ein Scroll mehrere Seiten weiter).
+  DateTime _lastWheel = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
@@ -56,6 +59,19 @@ class _PdfReaderPageState extends State<PdfReaderPage> {
         duration: const Duration(milliseconds: 250), curve: Curves.ease);
   }
 
+  /// Mausrad am Desktop: hoch/runter = vorige/nächste Seite.
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    final now = DateTime.now();
+    if (now.difference(_lastWheel).inMilliseconds < 220) return;
+    _lastWheel = now;
+    if (event.scrollDelta.dy > 0) {
+      if (_page < _total) _next();
+    } else if (event.scrollDelta.dy < 0) {
+      if (_page > 1) _prev();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -67,12 +83,15 @@ class _PdfReaderPageState extends State<PdfReaderPage> {
                 setState(() => _total = doc.pagesCount),
             onPageChanged: (page) => setState(() => _page = page),
           )
-        : PdfView(
-            controller: _ctrl!,
-            scrollDirection: Axis.vertical,
-            onDocumentLoaded: (doc) =>
-                setState(() => _total = doc.pagesCount),
-            onPageChanged: (page) => setState(() => _page = page),
+        : Listener(
+            onPointerSignal: _onPointerSignal,
+            child: PdfView(
+              controller: _ctrl!,
+              scrollDirection: Axis.vertical,
+              onDocumentLoaded: (doc) =>
+                  setState(() => _total = doc.pagesCount),
+              onPageChanged: (page) => setState(() => _page = page),
+            ),
           );
 
     return Stack(

@@ -8,6 +8,7 @@ import 'package:pdfx/pdfx.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../license_service.dart';
+import '../open_in_app.dart';
 import '../usage_gate.dart';
 
 enum OutputFormat { png, jpeg }
@@ -41,6 +42,7 @@ class _PdfToImagePageState extends State<PdfToImagePage> {
   final List<String> _resultFiles = [];
 
   final _dpiController = TextEditingController(text: '300');
+  final _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -54,6 +56,7 @@ class _PdfToImagePageState extends State<PdfToImagePage> {
   void dispose() {
     _pageRangeController.dispose();
     _dpiController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -202,6 +205,12 @@ class _PdfToImagePageState extends State<PdfToImagePage> {
     }
   }
 
+  /// Öffnet das gerade erzeugte Bild in der App (erstes Ergebnis).
+  Future<void> _openResult() async {
+    if (_resultFiles.isEmpty) return;
+    await openPathInApp(context, _resultFiles.first);
+  }
+
   Future<void> _openOutputFolder() async {
     final dir = _outputDir;
     if (dir == null) return;
@@ -230,9 +239,13 @@ class _PdfToImagePageState extends State<PdfToImagePage> {
     final isDesktop =
         Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
-    Widget body = ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
+    Widget body = Scrollbar(
+      controller: _scrollController,
+      thumbVisibility: isDesktop,
+      child: ListView(
+        controller: _scrollController,
+        padding: const EdgeInsets.all(20),
+        children: [
         _Card(
           title: '1. PDF auswählen',
           child: Column(
@@ -477,17 +490,25 @@ class _PdfToImagePageState extends State<PdfToImagePage> {
                 label: const Text('Teilen / WhatsApp'),
               ),
             ),
-            if (isDesktop) ...[
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: _openOutputFolder,
-                icon: const Icon(Icons.folder),
-                label: const Text('Ordner öffnen'),
-              ),
-            ],
+            const SizedBox(width: 12),
+            // Öffnet nur das gerade erzeugte Bild.
+            OutlinedButton.icon(
+              onPressed: _openResult,
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('Öffnen'),
+            ),
           ]),
+          if (isDesktop) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _openOutputFolder,
+              icon: const Icon(Icons.folder),
+              label: const Text('Ordner öffnen'),
+            ),
+          ],
         ],
       ],
+      ),
     );
 
     body = Center(

@@ -25,6 +25,9 @@ Future<void> main(List<String> args) async {
   String? openedPdf = OpenedFile.fromArgs(args);
   openedPdf ??= await OpenedFile.fromAndroid();
 
+  // Auf später (Warmstart) geschobene „Öffnen mit"-Dateien lauschen.
+  OpenedFile.listenForIncoming();
+
   runApp(PdfZuBildApp(openedPdfPath: openedPdf));
 }
 
@@ -65,6 +68,23 @@ class _AppShellState extends State<AppShell> {
     super.initState();
     _readerPath = widget.openedPdfPath;
     _view = _readerPath != null ? _View.reader : _View.pdfToImage;
+    OpenedFile.incoming.addListener(_onIncomingFile);
+  }
+
+  @override
+  void dispose() {
+    OpenedFile.incoming.removeListener(_onIncomingFile);
+    super.dispose();
+  }
+
+  /// Während die App läuft kam per „Öffnen mit" eine PDF herein → Reader öffnen.
+  void _onIncomingFile() {
+    final path = OpenedFile.incoming.value;
+    if (path == null) return;
+    setState(() {
+      _readerPath = path;
+      _view = _View.reader;
+    });
   }
 
   AppMode get _toggleMode =>
@@ -138,6 +158,13 @@ class _AppShellState extends State<AppShell> {
         foregroundColor: scheme.onPrimary,
         title: ModeToggle(mode: _toggleMode, onChanged: _onModeChanged),
         actions: [
+          // Oben neben dem Umschalter: Datei öffnen (PDF → Reader, Bild → Anzeige).
+          if (_view != _View.reader)
+            IconButton(
+              tooltip: 'Öffnen (PDF im Reader / Bild anzeigen)',
+              icon: const Icon(Icons.folder_open),
+              onPressed: _openFile,
+            ),
           ListenableBuilder(
             listenable: LicenseService.instance,
             builder: (context, _) {
@@ -167,22 +194,6 @@ class _AppShellState extends State<AppShell> {
         ],
       ),
       body: SafeArea(child: body),
-      // Unten: Datei öffnen (PDF → Reader, Bild → Anzeige). In den Umwandel-Modi.
-      bottomNavigationBar: _view == _View.reader
-          ? null
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
-                child: OutlinedButton.icon(
-                  onPressed: _openFile,
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(46),
-                  ),
-                  icon: const Icon(Icons.folder_open),
-                  label: const Text('Öffnen (PDF im Reader / Bild anzeigen)'),
-                ),
-              ),
-            ),
     );
   }
 }

@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../image_processing.dart';
 import '../license_service.dart';
+import '../open_in_app.dart';
 import '../pdf_builder.dart';
 import '../usage_gate.dart';
 import 'crop_page.dart';
@@ -41,10 +42,17 @@ class _ImageToPdfPageState extends State<ImageToPdfPage> {
   String _statusText = '';
   String? _resultPdfPath;
   String? _outputDir;
+  final _scrollController = ScrollController();
 
   bool get _isMobile => Platform.isAndroid || Platform.isIOS;
   bool get _isDesktop =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickImages() async {
     final result = await FilePicker.platform.pickFiles(
@@ -189,6 +197,12 @@ class _ImageToPdfPageState extends State<ImageToPdfPage> {
     } catch (_) {}
   }
 
+  /// Öffnet das gerade erzeugte PDF im Reader.
+  Future<void> _openResult() async {
+    if (_resultPdfPath == null) return;
+    await openPathInApp(context, _resultPdfPath!);
+  }
+
   Future<void> _share() async {
     if (_resultPdfPath == null) return;
     try {
@@ -216,7 +230,11 @@ class _ImageToPdfPageState extends State<ImageToPdfPage> {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 640),
-        child: ListView(
+        child: Scrollbar(
+          controller: _scrollController,
+          thumbVisibility: _isDesktop,
+          child: ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.all(20),
           children: [
             _Card(
@@ -406,13 +424,24 @@ class _ImageToPdfPageState extends State<ImageToPdfPage> {
             ],
             if (_resultPdfPath != null && !_busy) ...[
               const SizedBox(height: 16),
-              FilledButton.tonalIcon(
-                onPressed: _share,
-                style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(46)),
-                icon: const Icon(Icons.share),
-                label: const Text('Teilen / WhatsApp'),
-              ),
+              Row(children: [
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed: _share,
+                    style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(46)),
+                    icon: const Icon(Icons.share),
+                    label: const Text('Teilen / WhatsApp'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Öffnet nur das gerade erzeugte PDF im Reader.
+                OutlinedButton.icon(
+                  onPressed: _openResult,
+                  icon: const Icon(Icons.open_in_new),
+                  label: const Text('Öffnen'),
+                ),
+              ]),
               if (_isDesktop) ...[
                 const SizedBox(height: 8),
                 Wrap(
@@ -439,6 +468,7 @@ class _ImageToPdfPageState extends State<ImageToPdfPage> {
               ],
             ],
           ],
+          ),
         ),
       ),
     );
