@@ -7,9 +7,11 @@ import 'package:path/path.dart' as p;
 import 'package:pdfx/pdfx.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../file_naming.dart';
 import '../license_service.dart';
 import '../open_in_app.dart';
 import '../usage_gate.dart';
+import '../widgets/responsive_cards.dart';
 
 enum OutputFormat { png, jpeg }
 
@@ -34,6 +36,7 @@ class PdfToImagePageState extends State<PdfToImagePage> {
   bool _allPages = true;
   final _pageRangeController = TextEditingController();
   String? _outputDir;
+  final _fileNameController = TextEditingController();
 
   bool _busy = false;
   bool _dragging = false;
@@ -56,6 +59,7 @@ class PdfToImagePageState extends State<PdfToImagePage> {
   void dispose() {
     _pageRangeController.dispose();
     _dpiController.dispose();
+    _fileNameController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -80,6 +84,7 @@ class PdfToImagePageState extends State<PdfToImagePage> {
       _resultFiles.clear();
       _statusText = '';
       _outputDir ??= p.dirname(path);
+      _fileNameController.text = p.basenameWithoutExtension(path);
     });
   }
 
@@ -142,7 +147,9 @@ class PdfToImagePageState extends State<PdfToImagePage> {
     if (!await ensureCanConvert(context)) return;
 
     final outDir = _outputDir ?? p.dirname(_pdfPath!);
-    final baseName = p.basenameWithoutExtension(_pdfPath!);
+    final customName = sanitizeFileName(_fileNameController.text);
+    final baseName =
+        customName.isEmpty ? p.basenameWithoutExtension(_pdfPath!) : customName;
     final isPng = _format == OutputFormat.png;
     final ext = isPng ? 'png' : 'jpg';
     final pad = _pageCount >= 100 ? 3 : 2;
@@ -200,7 +207,6 @@ class PdfToImagePageState extends State<PdfToImagePage> {
       await SharePlus.instance.share(
         ShareParams(
           files: _resultFiles.map((f) => XFile(f)).toList(),
-          text: 'Umgewandelte PDF-Seiten',
         ),
       );
     } catch (e) {
@@ -208,10 +214,10 @@ class PdfToImagePageState extends State<PdfToImagePage> {
     }
   }
 
-  /// Öffnet das gerade erzeugte Bild in der App (erstes Ergebnis).
+  /// Öffnet die gerade erzeugten Bilder in der App (alle Seiten, blätterbar).
   Future<void> _openResult() async {
     if (_resultFiles.isEmpty) return;
-    await openPathInApp(context, _resultFiles.first);
+    await openPathsInApp(context, _resultFiles);
   }
 
   Future<void> _openOutputFolder() async {
@@ -249,6 +255,9 @@ class PdfToImagePageState extends State<PdfToImagePage> {
         controller: _scrollController,
         padding: const EdgeInsets.all(20),
         children: [
+        ResponsiveCards(
+          enabled: isDesktop,
+          children: [
         _Card(
           title: '1. PDF auswählen',
           child: Column(
@@ -434,14 +443,30 @@ class PdfToImagePageState extends State<PdfToImagePage> {
           ),
         ),
         _Card(
-          title: '5. Zielordner',
+          title: '5. Zielordner & Name',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              OutlinedButton.icon(
-                onPressed: _busy ? null : _pickOutputDir,
-                icon: const Icon(Icons.folder_open),
-                label: const Text('Ordner wählen'),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : _pickOutputDir,
+                    icon: const Icon(Icons.folder_open),
+                    label: const Text('Ordner wählen'),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _fileNameController,
+                      enabled: !_busy,
+                      decoration: const InputDecoration(
+                        labelText: 'Name',
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               Text(
@@ -452,6 +477,8 @@ class PdfToImagePageState extends State<PdfToImagePage> {
               ),
             ],
           ),
+        ),
+          ],
         ),
         const SizedBox(height: 8),
         FilledButton.icon(
@@ -494,7 +521,7 @@ class PdfToImagePageState extends State<PdfToImagePage> {
               ),
             ),
             const SizedBox(width: 12),
-            // Öffnet nur das gerade erzeugte Bild.
+            // Öffnet die erzeugten Bilder (blätterbar bei mehreren Seiten).
             OutlinedButton.icon(
               onPressed: _openResult,
               icon: const Icon(Icons.open_in_new),
@@ -516,7 +543,7 @@ class PdfToImagePageState extends State<PdfToImagePage> {
 
     body = Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640),
+        constraints: BoxConstraints(maxWidth: isDesktop ? 1000 : 640),
         child: body,
       ),
     );

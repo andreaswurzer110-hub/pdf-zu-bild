@@ -8,11 +8,13 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../file_naming.dart';
 import '../image_processing.dart';
 import '../license_service.dart';
 import '../open_in_app.dart';
 import '../pdf_builder.dart';
 import '../usage_gate.dart';
+import '../widgets/responsive_cards.dart';
 import 'crop_page.dart';
 
 /// Ein Bild in der Liste (Original + optional zugeschnittene Variante).
@@ -42,6 +44,7 @@ class ImageToPdfPageState extends State<ImageToPdfPage> {
   String _statusText = '';
   String? _resultPdfPath;
   String? _outputDir;
+  final _fileNameController = TextEditingController();
   final _scrollController = ScrollController();
 
   bool get _isMobile => Platform.isAndroid || Platform.isIOS;
@@ -50,6 +53,7 @@ class ImageToPdfPageState extends State<ImageToPdfPage> {
 
   @override
   void dispose() {
+    _fileNameController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -137,12 +141,14 @@ class ImageToPdfPageState extends State<ImageToPdfPage> {
       setState(() => _statusText = 'PDF wird erstellt …');
       final pdfBytes = await buildPdfFromImages(processed);
       final stamp = DateTime.now().millisecondsSinceEpoch;
+      final customName = sanitizeFileName(_fileNameController.text);
+      final fileBase = customName.isEmpty ? 'Dokument_$stamp' : customName;
 
       await LicenseService.instance.registerConversion();
 
       if (_outputDir != null) {
         // In den gewählten Zielordner speichern.
-        final outPath = p.join(_outputDir!, 'Dokument_$stamp.pdf');
+        final outPath = p.join(_outputDir!, '$fileBase.pdf');
         await File(outPath).writeAsBytes(pdfBytes);
         setState(() {
           _resultPdfPath = outPath;
@@ -152,14 +158,14 @@ class ImageToPdfPageState extends State<ImageToPdfPage> {
       } else {
         // Kein Zielordner: temporär ablegen (zum Teilen) …
         final dir = await getTemporaryDirectory();
-        final tmpPath = p.join(dir.path, 'Dokument_$stamp.pdf');
+        final tmpPath = p.join(dir.path, '$fileBase.pdf');
         await File(tmpPath).writeAsBytes(pdfBytes);
         setState(() {
           _resultPdfPath = tmpPath;
           _statusText = '✓ PDF mit ${processed.length} Seite(n) erstellt.';
         });
         // … und auf dem Desktop direkt „Speichern unter…" anbieten.
-        if (_isDesktop) await _saveAs(pdfBytes);
+        if (_isDesktop) await _saveAs(pdfBytes, suggestedName: '$fileBase.pdf');
       }
     } catch (e) {
       _showError('Fehler beim Erstellen: $e');
@@ -169,11 +175,11 @@ class ImageToPdfPageState extends State<ImageToPdfPage> {
     }
   }
 
-  Future<void> _saveAs(Uint8List pdfBytes) async {
+  Future<void> _saveAs(Uint8List pdfBytes, {String suggestedName = 'Dokument.pdf'}) async {
     try {
       final path = await FilePicker.platform.saveFile(
         dialogTitle: 'PDF speichern',
-        fileName: 'Dokument.pdf',
+        fileName: suggestedName,
         type: FileType.custom,
         allowedExtensions: ['pdf'],
         bytes: pdfBytes,
@@ -240,7 +246,7 @@ class ImageToPdfPageState extends State<ImageToPdfPage> {
 
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640),
+        constraints: BoxConstraints(maxWidth: _isDesktop ? 1000 : 640),
         child: Scrollbar(
           controller: _scrollController,
           thumbVisibility: _isDesktop,
@@ -248,6 +254,9 @@ class ImageToPdfPageState extends State<ImageToPdfPage> {
           controller: _scrollController,
           padding: const EdgeInsets.all(20),
           children: [
+            ResponsiveCards(
+              enabled: _isDesktop,
+              children: [
             _Card(
               title: '1. Bilder hinzufügen',
               child: Column(
@@ -386,14 +395,31 @@ class ImageToPdfPageState extends State<ImageToPdfPage> {
               ),
             if (_items.isNotEmpty)
               _Card(
-                title: '4. Zielordner',
+                title: '4. Zielordner & Name',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    OutlinedButton.icon(
-                      onPressed: _busy ? null : _pickOutputDir,
-                      icon: const Icon(Icons.folder_open),
-                      label: const Text('Ordner wählen'),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _busy ? null : _pickOutputDir,
+                          icon: const Icon(Icons.folder_open),
+                          label: const Text('Ordner wählen'),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: _fileNameController,
+                            enabled: !_busy,
+                            decoration: const InputDecoration(
+                              labelText: 'Name',
+                              hintText: 'Dokument',
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -406,6 +432,8 @@ class ImageToPdfPageState extends State<ImageToPdfPage> {
                   ],
                 ),
               ),
+              ],
+            ),
             const SizedBox(height: 8),
             FilledButton.icon(
               onPressed: (_items.isNotEmpty && !_busy) ? _createPdf : null,
@@ -463,7 +491,8 @@ class ImageToPdfPageState extends State<ImageToPdfPage> {
                       onPressed: () async {
                         final bytes =
                             await File(_resultPdfPath!).readAsBytes();
-                        await _saveAs(bytes);
+                        await _saveAs(bytes,
+                            suggestedName: p.basename(_resultPdfPath!));
                       },
                       icon: const Icon(Icons.save_alt),
                       label: const Text('Speichern unter…'),
