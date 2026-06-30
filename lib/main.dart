@@ -7,7 +7,6 @@ import 'license_service.dart';
 import 'opened_file.dart';
 import 'purchase_service.dart';
 import 'pages/image_to_pdf_page.dart';
-import 'pages/image_viewer_page.dart';
 import 'pages/pdf_reader_page.dart';
 import 'pages/pdf_to_image_page.dart';
 import 'widgets/mode_toggle.dart';
@@ -62,6 +61,8 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   late _View _view;
   String? _readerPath;
+  final _pdfKey = GlobalKey<PdfToImagePageState>();
+  final _imgKey = GlobalKey<ImageToPdfPageState>();
 
   @override
   void initState() {
@@ -98,7 +99,8 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
-  /// Datei öffnen: PDF → Reader, Bild → Bildanzeige.
+  /// Datei öffnen: PDF wird im PDF→Bild-Umwandler vorausgewählt, ein Bild im
+  /// Bild→PDF-Umwandler hinzugefügt – die Datei bleibt also sichtbar geladen.
   Future<void> _openFile() async {
     final res = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -107,16 +109,16 @@ class _AppShellState extends State<AppShell> {
     final path = res?.files.single.path;
     if (path == null) return;
 
-    if (p.extension(path).toLowerCase() == '.pdf') {
-      setState(() {
-        _readerPath = path;
-        _view = _View.reader;
-      });
-    } else if (mounted) {
-      await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ImageViewerPage(path: path)),
-      );
-    }
+    final isPdf = p.extension(path).toLowerCase() == '.pdf';
+    setState(() => _view = isPdf ? _View.pdfToImage : _View.imageToPdf);
+    // Nach dem Rebuild die Datei im jeweiligen Umwandler vorauswählen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (isPdf) {
+        _pdfKey.currentState?.openExternalPdf(path);
+      } else {
+        _imgKey.currentState?.addImagesFromPaths([path]);
+      }
+    });
   }
 
   void _onMenu(String value) {
@@ -145,8 +147,8 @@ class _AppShellState extends State<AppShell> {
       body = IndexedStack(
         index: _view == _View.imageToPdf ? 1 : 0,
         children: [
-          PdfToImagePage(initialPdfPath: widget.openedPdfPath),
-          const ImageToPdfPage(),
+          PdfToImagePage(key: _pdfKey, initialPdfPath: widget.openedPdfPath),
+          ImageToPdfPage(key: _imgKey),
         ],
       );
     }

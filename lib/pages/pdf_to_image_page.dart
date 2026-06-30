@@ -21,10 +21,10 @@ class PdfToImagePage extends StatefulWidget {
   final String? initialPdfPath;
 
   @override
-  State<PdfToImagePage> createState() => _PdfToImagePageState();
+  State<PdfToImagePage> createState() => PdfToImagePageState();
 }
 
-class _PdfToImagePageState extends State<PdfToImagePage> {
+class PdfToImagePageState extends State<PdfToImagePage> {
   String? _pdfPath;
   int _pageCount = 0;
 
@@ -59,6 +59,9 @@ class _PdfToImagePageState extends State<PdfToImagePage> {
     _scrollController.dispose();
     super.dispose();
   }
+
+  /// Von außen (Öffnen-Knopf oben) eine PDF vorauswählen/laden.
+  Future<void> openExternalPdf(String path) => _loadPdf(path);
 
   Future<void> _loadPdf(String path) async {
     int pages = 0;

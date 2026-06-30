@@ -32,10 +32,10 @@ class ImageToPdfPage extends StatefulWidget {
   const ImageToPdfPage({super.key});
 
   @override
-  State<ImageToPdfPage> createState() => _ImageToPdfPageState();
+  State<ImageToPdfPage> createState() => ImageToPdfPageState();
 }
 
-class _ImageToPdfPageState extends State<ImageToPdfPage> {
+class ImageToPdfPageState extends State<ImageToPdfPage> {
   final List<_ImageItem> _items = [];
   ColorMode _colorMode = ColorMode.original;
   bool _busy = false;
@@ -52,6 +52,17 @@ class _ImageToPdfPageState extends State<ImageToPdfPage> {
   void dispose() {
     _scrollController.dispose();
     super.dispose();
+  }
+
+  /// Von außen (Öffnen-Knopf oben) Bilder vorauswählen/hinzufügen.
+  Future<void> addImagesFromPaths(List<String> paths) async {
+    for (final path in paths) {
+      try {
+        final bytes = await File(path).readAsBytes();
+        _items.add(_ImageItem(p.basename(path), bytes));
+      } catch (_) {}
+    }
+    if (mounted) setState(() => _resultPdfPath = null);
   }
 
   Future<void> _pickImages() async {
