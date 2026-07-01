@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
+import 'package:pdfrx/pdfrx.dart';
 
 import 'app_mode.dart';
 import 'license_service.dart';
@@ -15,6 +16,10 @@ import 'widgets/redeem_code_dialog.dart';
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // pdfium-Engine (pdfrx) initialisieren – wir öffnen PDFs teils direkt über die
+  // Dokument-API (Konverter), bevor ein pdfrx-Widget gebaut wird.
+  await pdfrxFlutterInitialize();
 
   // Lizenz-/Kauf-Status laden (Gratis-Zähler, Vollversion).
   await LicenseService.instance.init();

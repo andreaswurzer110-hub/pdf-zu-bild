@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
-import 'package:pdfx/pdfx.dart';
+import 'package:pdfrx/pdfrx.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../file_naming.dart';
@@ -14,6 +16,19 @@ import '../usage_gate.dart';
 import '../widgets/responsive_cards.dart';
 
 enum OutputFormat { png, jpeg }
+
+/// Kodiert die von pdfium gelieferten BGRA-Rohpixel in einem Hintergrund-
+/// Isolate zu PNG bzw. JPEG (hält die UI während großer Seiten flüssig).
+Uint8List _encodePage((int, int, Uint8List, bool, int) e) {
+  final (width, height, pixels, isPng, quality) = e;
+  final image = img.Image.fromBytes(
+    width: width,
+    height: height,
+    bytes: pixels.buffer,
+    order: img.ChannelOrder.bgra,
+  );
+  return isPng ? img.encodePng(image) : img.encodeJpg(image, quality: quality);
+}
 
 /// Modus „PDF → Bild": wandelt PDF-Seiten in PNG/JPEG um.
 class PdfToImagePage extends StatefulWidget {
@@ -71,8 +86,8 @@ class PdfToImagePageState extends State<PdfToImagePage> {
     int pages = 0;
     try {
       final doc = await PdfDocument.openFile(path);
-      pages = doc.pagesCount;
-      await doc.close();
+      pages = doc.pages.length;
+      await doc.dispose();
     } catch (e) {
       _showError('PDF konnte nicht geöffnet werden: $e');
       return;
@@ -169,23 +184,31 @@ class PdfToImagePageState extends State<PdfToImagePage> {
         setState(() => _statusText =
             'Seite $pageNo … (${idx + 1}/${targetPages.length})');
 
-        final page = await doc.getPage(pageNo);
-        final image = await page.render(
-          width: page.width * _dpi / 72.0,
-          height: page.height * _dpi / 72.0,
-          format: isPng ? PdfPageImageFormat.png : PdfPageImageFormat.jpeg,
-          backgroundColor: '#FFFFFF',
-          quality: isPng ? 100 : _jpegQuality,
+        final page = doc.pages[pageNo - 1];
+        final rendered = await page.render(
+          fullWidth: page.width * _dpi / 72.0,
+          fullHeight: page.height * _dpi / 72.0,
+          backgroundColor: 0xFFFFFFFF,
         );
-        await page.close();
-        if (image == null) {
+        if (rendered == null) {
           throw Exception('Seite $pageNo konnte nicht gerendert werden.');
         }
+        // Rohpixel (BGRA) kopieren, natives Bild sofort freigeben, dann im
+        // Hintergrund-Isolate zu PNG/JPEG kodieren.
+        final params = (
+          rendered.width,
+          rendered.height,
+          Uint8List.fromList(rendered.pixels),
+          isPng,
+          _jpegQuality,
+        );
+        rendered.dispose();
+        final bytes = await compute(_encodePage, params);
 
         final fileName =
             '${baseName}_Seite_${pageNo.toString().padLeft(pad, '0')}.$ext';
         final outPath = p.join(outDir, fileName);
-        await File(outPath).writeAsBytes(image.bytes);
+        await File(outPath).writeAsBytes(bytes);
         _resultFiles.add(outPath);
         setState(() => _progress = (idx + 1) / targetPages.length);
       }
@@ -196,7 +219,7 @@ class PdfToImagePageState extends State<PdfToImagePage> {
       _showError('Fehler beim Umwandeln: $e');
       setState(() => _statusText = 'Abgebrochen wegen Fehler.');
     } finally {
-      await doc?.close();
+      await doc?.dispose();
       if (mounted) setState(() => _busy = false);
     }
   }

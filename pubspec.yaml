@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.5+6
+version: 1.0.6+7
 
 environment:
   sdk: ^3.12.2
@@ -34,7 +34,6 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  pdfx: ^2.9.2
   file_picker: 8.3.3
   share_plus: 11.0.0
   path_provider: ^2.1.6
@@ -47,6 +46,7 @@ dependencies:
   shared_preferences: ^2.5.5
   in_app_purchase: ^3.3.0
   photo_view: ^0.15.0
+  pdfrx: ^2.4.4
 
 dev_dependencies:
   flutter_test:
@@ -85,7 +85,7 @@ msix_config:
   publisher_display_name: Andreas Wurzer
   identity_name: at.aw.pdfzubild
   publisher: CN=Andreas Wurzer
-  msix_version: 1.0.5.0
+  msix_version: 1.0.6.0
   logo_path: assets/icon/app_icon.png
   file_extension: .pdf
   capabilities: ""

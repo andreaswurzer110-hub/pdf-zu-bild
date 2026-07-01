@@ -39,7 +39,16 @@ parts:
     plugin: flutter
     flutter-target: lib/main.dart
     override-build: |
-      # Snap-Version = die 4-teilige msix_version aus pubspec (z. B. 1.0.5.0),
+      # pdfrx (PDF-Rendering + Reader) nutzt Dart Native Assets, um pdfium beim
+      # Build von bblanchon/pdfium-binaries herunterzuladen. Das muss im
+      # Build-Flutter aktiviert sein – sonst fehlt die native Bibliothek und die
+      # PDF-Funktionen werfen zur Laufzeit MissingPluginException. Die Einstellung
+      # direkt in die Flutter-Settings schreiben (unabhängig davon, ob `flutter`
+      # an dieser Stelle schon auf PATH ist); craftctl default baut danach mit
+      # aktivierten Native Assets. (Braucht Netz beim Build – im Snap-Build da.)
+      mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/flutter"
+      echo '{"enable-native-assets": true}' > "${XDG_CONFIG_HOME:-$HOME/.config}/flutter/settings"
+      # Snap-Version = die 4-teilige msix_version aus pubspec (z. B. 1.0.6.0),
       # damit der Store die volle Nummer inkl. Revision zeigt. pubspec `version:`
       # ist nur 3-teilig (semver), taugt dafür nicht.
       craftctl set version="$(sed -n 's/^[[:space:]]*msix_version:[[:space:]]*\([0-9.]*\).*/\1/p' pubspec.yaml)"
