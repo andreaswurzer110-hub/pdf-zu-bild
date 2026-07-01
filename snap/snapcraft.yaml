@@ -47,9 +47,18 @@ parts:
 
   # file_picker öffnet auf Linux den Datei-/Ordner-Dialog über `zenity`
   # (PDF wählen, Zielordner wählen). Unter strict confinement ist das Host-zenity
-  # nicht sichtbar → mit ins Snap bündeln. Eigener Part, damit die GTK-Abhängig-
-  # keiten den Flutter-Build nicht durcheinanderbringen (Runtime liefert gnome).
+  # nicht sichtbar → die zenity-Binärdatei mit ins Snap bündeln.
+  #
+  # WICHTIG: NUR die Binärdatei (+ ihre Daten) stagen, NICHT die per
+  # stage-packages mitgezogenen Abhängigkeiten. Die schleppen Mesa/EGL/GTK mit
+  # und überlagern die Grafikbibliotheken der gnome-Extension → beim Start
+  # „libEGL fatal: did not find extension DRI_Mesa version 1" → die App (und
+  # zenity) starten gar nicht. GTK/GL für zenity liefert zur Laufzeit die
+  # gnome-Runtime – genau wie für die Flutter-App selbst.
   zenity:
     plugin: nil
     stage-packages:
       - zenity
+    stage:
+      - usr/bin/zenity
+      - usr/share/zenity
