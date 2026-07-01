@@ -1,0 +1,55 @@
+name: pdf-zu-bild-und-reader # Im Snap Store zu registrieren (pdf-zu-bild ggf. vergeben).
+adopt-info: pdf-zu-bild # Version wird im Part aus pubspec.yaml gesetzt.
+summary: PDF ↔ Bild umwandeln, scannen und PDFs lesen – schnell und lokal
+description: |
+  PDF zu Bild wandelt in beide Richtungen um – schnell, in hoher Qualität und
+  komplett auf deinem Gerät. Keine Anmeldung, keine Cloud, keine Werbung.
+
+  PDF → Bild
+  - Alle oder einzelne Seiten in PNG oder JPEG umwandeln
+  - Auflösung frei wählbar – Standard 300 DPI für gestochen scharfen Text
+  - Am PC bequem per Drag & Drop
+
+  Bild → PDF
+  - Mehrere Bilder oder Fotos zu einem PDF zusammenfügen
+  - Seiten sortieren und zuschneiden
+  - Darstellung: Original, Schwarz-Weiß oder „Scan" (wie eingescannt)
+
+  PDF-Reader
+  - PDFs direkt öffnen und mit Zoom lesen
+  - Oben bequem zwischen den Funktionen umschalten
+
+  Auf Linux ist die App komplett kostenlos und ohne Einschränkungen nutzbar.
+
+base: core22
+confinement: strict
+grade: stable
+
+apps:
+  pdf-zu-bild-und-reader: # App-Name = Snap-Name → Start per `pdf-zu-bild-und-reader`.
+    command: pdf_zu_bild # Name der gebauten Flutter-Binärdatei (BINARY_NAME).
+    extensions: [gnome] # GTK3/GNOME-Integration: Grafik, Wayland/X11, Themes, Portale.
+    plugs:
+      - home # PDFs lesen / Bilder in den gewählten Ordner schreiben
+      - removable-media # dieselben Dateien auf USB-Sticks/externen Datenträgern
+
+parts:
+  pdf-zu-bild:
+    source: .
+    plugin: flutter
+    flutter-target: lib/main.dart
+    override-build: |
+      # Snap-Version = die 4-teilige msix_version aus pubspec (z. B. 1.0.5.0),
+      # damit der Store die volle Nummer inkl. Revision zeigt. pubspec `version:`
+      # ist nur 3-teilig (semver), taugt dafür nicht.
+      craftctl set version="$(sed -n 's/^[[:space:]]*msix_version:[[:space:]]*\([0-9.]*\).*/\1/p' pubspec.yaml)"
+      craftctl default
+
+  # file_picker öffnet auf Linux den Datei-/Ordner-Dialog über `zenity`
+  # (PDF wählen, Zielordner wählen). Unter strict confinement ist das Host-zenity
+  # nicht sichtbar → mit ins Snap bündeln. Eigener Part, damit die GTK-Abhängig-
+  # keiten den Flutter-Build nicht durcheinanderbringen (Runtime liefert gnome).
+  zenity:
+    plugin: nil
+    stage-packages:
+      - zenity

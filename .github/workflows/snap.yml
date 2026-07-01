@@ -1,0 +1,71 @@
+# Snap bauen & in den Snap Store veröffentlichen (GitHub Actions = Cloud-Linux).
+#
+# So lässt sich der Snap komplett von Windows aus releasen:
+#   - "Run workflow" (manuell) → baut + veröffentlicht in den gewählten Channel
+#     (Default edge) → zum Testen.
+#   - Tag vX.Y.Z pushen → baut + veröffentlicht in stable (das Release).
+#
+# VORAUSSETZUNG (einmalig – siehe snap/README.md):
+#   1. Snap-Name `pdf-zu-bild-und-reader` im Store registrieren.
+#   2. Repo-Secret SNAPCRAFT_STORE_CREDENTIALS setzen (aus `snapcraft export-login`,
+#      mit Zugriff auf DIESEN Snap – das notizblock-Token reicht NICHT).
+#   Ohne das Secret läuft nur der BUILD (gut zum Validieren), das Veröffentlichen
+#   wird übersprungen.
+
+name: Snap-Build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Channel (edge/beta/candidate/stable)'
+        required: false
+        default: edge
+
+concurrency:
+  group: snap-build
+  cancel-in-progress: true
+
+# Node-20-Deprecation: die snapcore-Actions gibt es nur als @v1 (node20). Dieses
+# offizielle Opt-in-Flag zwingt sie auf Node 24, sodass die Pipeline auch nach
+# der GitHub-Frist weiterläuft. Sobald snapcore eine node24-Version hat: Version
+# bumpen + Flag entfernen.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Snap bauen
+        id: build
+        uses: snapcore/action-build@v1
+
+      # Gebaute .snap auch als Artefakt anhängen (zum lokalen Testen herunterladbar,
+      # auch ohne Store-Credentials).
+      - name: Snap als Artefakt
+        uses: actions/upload-artifact@v7
+        with:
+          name: snap
+          path: ${{ steps.build.outputs.snap }}
+
+      - name: Store-Credentials vorhanden?
+        id: creds
+        env:
+          C: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          if [ -n "$C" ]; then echo "has=true" >> "$GITHUB_OUTPUT"; else echo "has=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: In den Snap Store veröffentlichen
+        if: steps.creds.outputs.has == 'true'
+        uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.build.outputs.snap }}
+          # Tag → stable, sonst der manuell gewählte Channel (Default edge).
+          release: ${{ github.event.inputs.release || (startsWith(github.ref, 'refs/tags/v') && 'stable' || 'edge') }}

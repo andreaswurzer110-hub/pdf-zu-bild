@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=PDF zu Bild
+GenericName=PDF-Konverter & Reader
+Comment=PDF in Bilder umwandeln, Bilder als PDF speichern und PDFs lesen
+Exec=pdf-zu-bild-und-reader %f
+Icon=${SNAP}/meta/gui/pdf-zu-bild-und-reader.png
+Terminal=false
+Type=Application
+Categories=Utility;Graphics;Office;Viewer;
+Keywords=PDF;Bild;Image;Konverter;Scan;Reader;PNG;JPEG;
+MimeType=application/pdf;
+StartupNotify=true
