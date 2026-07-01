@@ -294,14 +294,18 @@ class ImageToPdfPageState extends State<ImageToPdfPage> {
                 child: Column(
                   children: [
                     Text(
-                      'Tippen zum Zuschneiden, ziehen zum Sortieren.',
+                      'Tippen zum Zuschneiden, am Griff ziehen zum Sortieren.',
                       style: TextStyle(fontSize: 12, color: scheme.outline),
                     ),
                     const SizedBox(height: 8),
                     ReorderableListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      buildDefaultDragHandles: true,
+                      // Kein automatischer Drag-Griff auf der ganzen Zeile –
+                      // sonst schluckt der Drag auf dem Desktop die Taps auf die
+                      // Zuschneiden-/Entfernen-Buttons. Stattdessen ein eigener
+                      // Griff (unten, ReorderableDragStartListener).
+                      buildDefaultDragHandles: false,
                       itemCount: _items.length,
                       onReorderItem: (oldI, newI) {
                         setState(() {
@@ -350,6 +354,15 @@ class ImageToPdfPageState extends State<ImageToPdfPage> {
                                           _items.removeAt(i);
                                           _resultPdfPath = null;
                                         }),
+                              ),
+                              // Eigener Anfasser zum Sortieren (Drag).
+                              ReorderableDragStartListener(
+                                index: i,
+                                enabled: !_busy,
+                                child: const Padding(
+                                  padding: EdgeInsets.only(left: 4, right: 4),
+                                  child: Icon(Icons.drag_handle),
+                                ),
                               ),
                             ],
                           ),

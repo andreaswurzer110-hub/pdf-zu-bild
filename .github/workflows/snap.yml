@@ -1,9 +1,10 @@
 # Snap bauen & in den Snap Store veröffentlichen (GitHub Actions = Cloud-Linux).
 #
-# So lässt sich der Snap komplett von Windows aus releasen:
-#   - "Run workflow" (manuell) → baut + veröffentlicht in den gewählten Channel
-#     (Default edge) → zum Testen.
-#   - Tag vX.Y.Z pushen → baut + veröffentlicht in stable (das Release).
+# Veröffentlicht wird NUR manuell per "Run workflow" (Channel wählbar, Default
+# edge). Bewusst NICHT an v*-Tags gekoppelt: die lösen play-upload.yml (Android)
+# aus, und der Snap soll nicht bei jedem Android-Release ungeprüft auf stable
+# springen. Zum Testen edge wählen; wenn edge auf Linux verifiziert ist, den
+# Workflow erneut mit Channel stable starten.
 #
 # VORAUSSETZUNG (einmalig – siehe snap/README.md):
 #   1. Snap-Name `pdf-zu-bild-und-reader` im Store registrieren.
@@ -15,8 +16,6 @@
 name: Snap-Build
 
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
     inputs:
       release:
@@ -67,5 +66,5 @@ jobs:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
         with:
           snap: ${{ steps.build.outputs.snap }}
-          # Tag → stable, sonst der manuell gewählte Channel (Default edge).
-          release: ${{ github.event.inputs.release || (startsWith(github.ref, 'refs/tags/v') && 'stable' || 'edge') }}
+          # Manuell gewählter Channel (Default edge).
+          release: ${{ github.event.inputs.release || 'edge' }}

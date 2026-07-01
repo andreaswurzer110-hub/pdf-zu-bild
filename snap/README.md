@@ -52,8 +52,9 @@ GitHub-Build-Verknüpfung im Store-Dashboard erscheint erst nach der 1. Revision
   ersten Probelauf.
 - **Testen (edge):** dasselbe „Run workflow", Channel `edge` → baut + lädt nach
   edge. Test auf Zorin: `sudo snap install pdf-zu-bild-und-reader --edge`.
-- **Live (stable):** Tag pushen → Pipeline veröffentlicht nach **stable**:
-  `git tag vX.Y.Z; git push origin vX.Y.Z`.
+- **Live (stable):** wenn edge auf Linux getestet ist, „Run workflow" erneut mit
+  Channel **stable** starten. (Bewusst NICHT an `v*`-Tags gekoppelt – die lösen
+  nur den Android-Play-Upload aus, s. `.github/workflows/snap.yml`.)
 
 ### Alternative: alles lokal auf Zorin
 ```bash
