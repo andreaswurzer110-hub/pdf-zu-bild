@@ -19,6 +19,11 @@ import '../widgets/responsive_cards.dart';
 
 enum OutputFormat { png, jpeg }
 
+/// Richtung, in der eine große Seite in Streifen zerschnitten wird.
+/// [leftRight] = senkrechte Schnitte (Spalten, zum Durchwischen links→rechts),
+/// [topBottom] = waagrechte Schnitte (Zeilen, oben→unten).
+enum StripAxis { leftRight, topBottom }
+
 /// Kodiert die von pdfium gelieferten BGRA-Rohpixel in einem Hintergrund-
 /// Isolate zu PNG bzw. JPEG (hält die UI während großer Seiten flüssig).
 /// Die Pixel kommen als [TransferableTypedData] – so wandern sie ohne zweite
@@ -32,6 +37,19 @@ Uint8List _encodePage((int, int, TransferableTypedData, bool, int) e) {
     order: img.ChannelOrder.bgra,
   );
   return isPng ? img.encodePng(image) : img.encodeJpg(image, quality: quality);
+}
+
+/// Renderplan für eine Seite: Zielgröße in Pixeln, effektiver DPI und – falls
+/// aufgeteilt – Anzahl und Richtung der Streifen.
+class _PagePlan {
+  _PagePlan(this.pageNo, this.fullW, this.fullH, this.effDpi, this.strips,
+      this.leftRight);
+  final int pageNo;
+  final double fullW;
+  final double fullH;
+  final int effDpi;
+  final int strips;
+  final bool leftRight;
 }
 
 /// Modus „PDF → Bild": wandelt PDF-Seiten in PNG/JPEG um.
@@ -52,6 +70,9 @@ class PdfToImagePageState extends State<PdfToImagePage> {
   int _dpi = 300;
   OutputFormat _format = OutputFormat.png;
   int _jpegQuality = 92;
+  bool _splitStrips = false;
+  StripAxis _stripAxis = StripAxis.leftRight;
+  int _stripCount = 4;
   bool _allPages = true;
   final _pageRangeController = TextEditingController();
   String? _outputDir;
@@ -151,6 +172,47 @@ class PdfToImagePageState extends State<PdfToImagePage> {
     return list;
   }
 
+  /// Rendert einen (Teil-)Bereich einer Seite und kodiert ihn zu PNG/JPEG-Bytes.
+  /// [fullW]/[fullH] = virtuelle Gesamtgröße der Seite in Pixeln (Vollauflösung).
+  /// [x]/[y]/[w]/[h] = auszuschneidender Bereich darin; sind [w]/[h] null, wird
+  /// die ganze Seite gerendert. Gibt null zurück bei Abbruch oder Fehler.
+  Future<Uint8List?> _renderRegionToBytes(
+    PdfPage page, {
+    required double fullW,
+    required double fullH,
+    int x = 0,
+    int y = 0,
+    int? w,
+    int? h,
+    required bool isPng,
+  }) async {
+    final token = page.createCancellationToken();
+    _renderToken = token;
+    final rendered = await page.render(
+      x: x,
+      y: y,
+      width: w,
+      height: h,
+      fullWidth: fullW,
+      fullHeight: fullH,
+      backgroundColor: 0xFFFFFFFF,
+      cancellationToken: token,
+    );
+    _renderToken = null;
+    if (rendered == null) return null;
+    // Rohpixel (BGRA) in einen transferierbaren Puffer packen, das native Bild
+    // sofort freigeben, dann im Hintergrund-Isolate kodieren.
+    final params = (
+      rendered.width,
+      rendered.height,
+      TransferableTypedData.fromList([rendered.pixels]),
+      isPng,
+      _jpegQuality,
+    );
+    rendered.dispose();
+    return compute(_encodePage, params);
+  }
+
   Future<void> _convert() async {
     if (_pdfPath == null) return;
 
@@ -202,75 +264,125 @@ class PdfToImagePageState extends State<PdfToImagePage> {
     PdfDocument? doc;
     try {
       doc = await PdfDocument.openFile(_pdfPath!);
-      for (int idx = 0; idx < targetPages.length; idx++) {
-        if (_cancelRequested) break;
-        final pageNo = targetPages[idx];
-        final page = doc.pages[pageNo - 1];
 
-        // Zielgröße in Pixeln aus dem DPI. Ist die Seite so groß, dass der
-        // Puffer das Budget sprengt, gleichmäßig herunterskalieren, bis er
-        // passt (verhindert Absturz UND endloses Laden bei riesigen Seiten).
-        // Es wird dann die höchste noch mögliche Auflösung verwendet – das ist
-        // schärfer, als den DPI von Hand abzusenken.
+      // Vorab je Seite planen: Zielgröße (mit evtl. Downscale beim Einzelbild)
+      // und Streifen-Anzahl. So kennt der Fortschrittsbalken die Gesamtarbeit.
+      final plans = <_PagePlan>[];
+      for (final pageNo in targetPages) {
+        final page = doc.pages[pageNo - 1];
         double fullW = page.width * _dpi / 72.0;
         double fullH = page.height * _dpi / 72.0;
         int effDpi = _dpi;
-        final double rasterBytes = fullW * fullH * 4;
-        if (rasterBytes > maxRasterBytes) {
-          final scale = math.sqrt(maxRasterBytes / rasterBytes);
-          fullW *= scale;
-          fullH *= scale;
-          effDpi = (_dpi * scale).floor();
-          if (!isDesktop) _largePageDownscaled = true;
+
+        if (_splitStrips) {
+          // Streifen: volle DPI behalten und in Streifen zerlegen. Anzahl bei
+          // Bedarf erhöhen, damit jeder einzelne Streifen ins Budget passt.
+          final leftRight = _stripAxis == StripAxis.leftRight;
+          int n = _stripCount < 1 ? 1 : _stripCount;
+          while (n < 100000) {
+            final double stripBytes = leftRight
+                ? (fullW / n) * fullH * 4
+                : fullW * (fullH / n) * 4;
+            if (stripBytes <= maxRasterBytes) break;
+            n++;
+          }
+          plans.add(_PagePlan(pageNo, fullW, fullH, effDpi, n, leftRight));
+        } else {
+          // Einzelbild: zu große Seite gleichmäßig herunterskalieren.
+          final double rasterBytes = fullW * fullH * 4;
+          if (rasterBytes > maxRasterBytes) {
+            final scale = math.sqrt(maxRasterBytes / rasterBytes);
+            fullW *= scale;
+            fullH *= scale;
+            effDpi = (_dpi * scale).floor();
+            if (!isDesktop) _largePageDownscaled = true;
+          }
+          if (fullW < 1) fullW = 1;
+          if (fullH < 1) fullH = 1;
+          plans.add(_PagePlan(pageNo, fullW, fullH, effDpi, 1, true));
         }
-        if (fullW < 1) fullW = 1;
-        if (fullH < 1) fullH = 1;
+      }
 
-        setState(() {
-          _progress = idx / targetPages.length;
-          _statusText = effDpi < _dpi
-              ? 'Seite $pageNo wird gerendert … (${idx + 1}/${targetPages.length})\n'
-                  'Sehr große Seite – auf $effDpi dpi begrenzt (max. Auflösung).'
-              : 'Seite $pageNo wird gerendert … (${idx + 1}/${targetPages.length})';
-        });
+      final int totalUnits = plans.fold(0, (sum, pl) => sum + pl.strips);
+      int done = 0;
 
-        final token = page.createCancellationToken();
-        _renderToken = token;
-        final rendered = await page.render(
-          fullWidth: fullW,
-          fullHeight: fullH,
-          backgroundColor: 0xFFFFFFFF,
-          cancellationToken: token,
-        );
-        _renderToken = null;
-        if (rendered == null) {
-          if (_cancelRequested) break;
-          throw Exception('Seite $pageNo konnte nicht gerendert werden.');
+      for (final plan in plans) {
+        if (_cancelRequested) break;
+        final page = doc.pages[plan.pageNo - 1];
+        final int fullWi = plan.fullW.floor().clamp(1, 1 << 30);
+        final int fullHi = plan.fullH.floor().clamp(1, 1 << 30);
+        final pageNoStr = plan.pageNo.toString().padLeft(pad, '0');
+
+        if (plan.strips <= 1) {
+          setState(() {
+            _progress = totalUnits == 0 ? 0 : done / totalUnits;
+            _statusText = plan.effDpi < _dpi
+                ? 'Seite ${plan.pageNo} wird gerendert …\n'
+                    'Sehr große Seite – auf ${plan.effDpi} dpi begrenzt (max. Auflösung).'
+                : 'Seite ${plan.pageNo} wird gerendert …';
+          });
+          final bytes = await _renderRegionToBytes(page,
+              fullW: fullWi.toDouble(), fullH: fullHi.toDouble(), isPng: isPng);
+          if (bytes == null) {
+            if (_cancelRequested) break;
+            throw Exception(
+                'Seite ${plan.pageNo} konnte nicht gerendert werden.');
+          }
+          final outPath = p.join(outDir, '${baseName}_Seite_$pageNoStr.$ext');
+          await File(outPath).writeAsBytes(bytes);
+          _resultFiles.add(outPath);
+          done++;
+          setState(() => _progress = totalUnits == 0 ? 1 : done / totalUnits);
+        } else {
+          final int n = plan.strips;
+          final int stripPad = n >= 100 ? 3 : 2;
+          for (int i = 0; i < n; i++) {
+            if (_cancelRequested) break;
+            int x, y, w, h;
+            if (plan.leftRight) {
+              final x0 = (i * fullWi / n).floor();
+              final x1 = ((i + 1) * fullWi / n).floor();
+              x = x0;
+              y = 0;
+              w = x1 - x0;
+              h = fullHi;
+            } else {
+              final y0 = (i * fullHi / n).floor();
+              final y1 = ((i + 1) * fullHi / n).floor();
+              x = 0;
+              y = y0;
+              w = fullWi;
+              h = y1 - y0;
+            }
+            if (w < 1) w = 1;
+            if (h < 1) h = 1;
+            setState(() {
+              _progress = totalUnits == 0 ? 0 : done / totalUnits;
+              _statusText =
+                  'Seite ${plan.pageNo}: Streifen ${i + 1}/$n wird gerendert …';
+            });
+            final bytes = await _renderRegionToBytes(page,
+                fullW: fullWi.toDouble(),
+                fullH: fullHi.toDouble(),
+                x: x,
+                y: y,
+                w: w,
+                h: h,
+                isPng: isPng);
+            if (bytes == null) {
+              if (_cancelRequested) break;
+              throw Exception(
+                  'Seite ${plan.pageNo}, Streifen ${i + 1} konnte nicht gerendert werden.');
+            }
+            final stripStr = (i + 1).toString().padLeft(stripPad, '0');
+            final outPath = p.join(outDir,
+                '${baseName}_Seite_${pageNoStr}_Streifen_$stripStr.$ext');
+            await File(outPath).writeAsBytes(bytes);
+            _resultFiles.add(outPath);
+            done++;
+            setState(() => _progress = totalUnits == 0 ? 1 : done / totalUnits);
+          }
         }
-
-        // Rohpixel (BGRA) in einen transferierbaren Puffer packen, das native
-        // Bild sofort freigeben, dann im Hintergrund-Isolate kodieren.
-        final params = (
-          rendered.width,
-          rendered.height,
-          TransferableTypedData.fromList([rendered.pixels]),
-          isPng,
-          _jpegQuality,
-        );
-        rendered.dispose();
-
-        if (mounted) {
-          setState(() => _statusText =
-              'Seite $pageNo wird gespeichert … (${idx + 1}/${targetPages.length})');
-        }
-        final bytes = await compute(_encodePage, params);
-
-        final fileName =
-            '${baseName}_Seite_${pageNo.toString().padLeft(pad, '0')}.$ext';
-        final outPath = p.join(outDir, fileName);
-        await File(outPath).writeAsBytes(bytes);
-        _resultFiles.add(outPath);
-        setState(() => _progress = (idx + 1) / targetPages.length);
       }
       if (_cancelRequested) {
         setState(() => _statusText = _resultFiles.isEmpty
@@ -570,6 +682,70 @@ class PdfToImagePageState extends State<PdfToImagePage> {
                     fontSize: 12,
                     color: Theme.of(context).colorScheme.outline),
               ),
+            ],
+          ),
+        ),
+        _Card(
+          title: '6. Große Seite aufteilen',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('In Streifen aufteilen'),
+                subtitle: const Text(
+                    'Erzeugt mehrere scharfe Teilbilder statt eines Riesenbilds '
+                    '– am Handy flüssig durchwischbar.'),
+                value: _splitStrips,
+                onChanged:
+                    _busy ? null : (v) => setState(() => _splitStrips = v),
+              ),
+              if (_splitStrips) ...[
+                const SizedBox(height: 8),
+                const Text('Richtung'),
+                const SizedBox(height: 4),
+                SegmentedButton<StripAxis>(
+                  segments: const [
+                    ButtonSegment(
+                        value: StripAxis.leftRight,
+                        label: Text('Links → rechts'),
+                        icon: Icon(Icons.swap_horiz)),
+                    ButtonSegment(
+                        value: StripAxis.topBottom,
+                        label: Text('Oben → unten'),
+                        icon: Icon(Icons.swap_vert)),
+                  ],
+                  selected: {_stripAxis},
+                  onSelectionChanged: _busy
+                      ? null
+                      : (s) => setState(() => _stripAxis = s.first),
+                ),
+                const SizedBox(height: 12),
+                Row(children: [
+                  const Text('Streifen '),
+                  Expanded(
+                    child: Slider(
+                      value: _stripCount.toDouble().clamp(2, 20),
+                      min: 2,
+                      max: 20,
+                      divisions: 18,
+                      label: '$_stripCount',
+                      onChanged: _busy
+                          ? null
+                          : (v) => setState(() => _stripCount = v.round()),
+                    ),
+                  ),
+                  SizedBox(width: 28, child: Text('$_stripCount')),
+                ]),
+                Text(
+                  'Bei sehr großen Seiten wird die Anzahl automatisch erhöht, '
+                  'damit jeder Streifen sicher passt. Mehr Streifen = flüssiger '
+                  'am Handy.',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.outline),
+                ),
+              ],
             ],
           ),
         ),
