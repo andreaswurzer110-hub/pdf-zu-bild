@@ -16,8 +16,9 @@ import '../license_service.dart';
 import '../open_in_app.dart';
 import '../usage_gate.dart';
 import '../widgets/responsive_cards.dart';
+import '../zoom_html.dart';
 
-enum OutputFormat { png, jpeg }
+enum OutputFormat { png, jpeg, html }
 
 /// Richtung, in der eine große Seite in Streifen zerschnitten wird.
 /// [leftRight] = senkrechte Schnitte (Spalten, zum Durchwischen links→rechts),
@@ -265,6 +266,42 @@ class PdfToImagePageState extends State<PdfToImagePage> {
     try {
       doc = await PdfDocument.openFile(_pdfPath!);
 
+      if (_format == OutputFormat.html) {
+        // Zoom-HTML: je Seite eine Datei mit Kachel-Pyramide (Karten-Zoom).
+        // Kein Downscale nötig – gerendert wird streifenweise in voller DPI.
+        for (int idx = 0;
+            idx < targetPages.length && !_cancelRequested;
+            idx++) {
+          final pageNo = targetPages[idx];
+          final page = doc.pages[pageNo - 1];
+          final single = targetPages.length == 1;
+          final fileName = single
+              ? '$baseName.html'
+              : '${baseName}_Seite_${pageNo.toString().padLeft(pad, '0')}.html';
+          final outPath = p.join(outDir, fileName);
+          final pageBase = idx / targetPages.length;
+          final ok = await writeZoomHtml(
+            page: page,
+            outPath: outPath,
+            title: single ? baseName : '$baseName – Seite $pageNo',
+            dpi: _dpi.clamp(72, 600),
+            stripBudgetBytes: maxRasterBytes ~/ 2,
+            onToken: (t) => _renderToken = t,
+            isCancelled: () => _cancelRequested,
+            onProgress: (status, frac) {
+              if (!mounted) return;
+              setState(() {
+                _statusText = single
+                    ? status
+                    : 'Seite $pageNo (${idx + 1}/${targetPages.length}): $status';
+                _progress = pageBase + frac / targetPages.length;
+              });
+            },
+          );
+          if (ok) _resultFiles.add(outPath);
+        }
+      } else {
+
       // Vorab je Seite planen: Zielgröße (mit evtl. Downscale beim Einzelbild)
       // und Streifen-Anzahl. So kennt der Fortschrittsbalken die Gesamtarbeit.
       final plans = <_PagePlan>[];
@@ -384,19 +421,26 @@ class PdfToImagePageState extends State<PdfToImagePage> {
           }
         }
       }
+      }
       if (_cancelRequested) {
         setState(() => _statusText = _resultFiles.isEmpty
             ? 'Abgebrochen.'
             : 'Abgebrochen – ${_resultFiles.length} Bild(er) gespeichert in:\n$outDir');
       } else {
         await LicenseService.instance.registerConversion();
-        final hint = _largePageDownscaled
-            ? '\n\nℹ️ Sehr große Seite(n) wurden zum Speichern verkleinert. '
-                'Die Windows-Desktop-App von „PDF zu Bild" kann solche Seiten in '
-                'deutlich höherer Auflösung (schärfer) umwandeln.'
-            : '';
+        var hint = '';
+        if (_largePageDownscaled) {
+          hint = '\n\nℹ️ Sehr große Seite(n) wurden zum Speichern verkleinert. '
+              'Die Windows-Desktop-App von „PDF zu Bild" kann solche Seiten in '
+              'deutlich höherer Auflösung (schärfer) umwandeln. Tipp: Das '
+              'Format „Zoom (HTML)" zeigt auch riesige Seiten in voller '
+              'Schärfe.';
+        } else if (_format == OutputFormat.html && !isDesktop) {
+          hint = '\n\nℹ️ Zum Ansehen die Datei in der Dateien-App antippen '
+              '(öffnet im Browser) oder über „Teilen" weitergeben.';
+        }
         setState(() => _statusText =
-            '✓ Fertig: ${_resultFiles.length} Bild(er) in:\n$outDir$hint');
+            '✓ Fertig: ${_resultFiles.length} Datei(en) in:\n$outDir$hint');
       }
     } catch (e) {
       _showError('Fehler beim Umwandeln: $e');
@@ -421,9 +465,29 @@ class PdfToImagePageState extends State<PdfToImagePage> {
     }
   }
 
-  /// Öffnet die gerade erzeugten Bilder in der App (alle Seiten, blätterbar).
+  /// Öffnet die gerade erzeugten Dateien: Bilder in der App (blätterbar),
+  /// Zoom-HTML im Standard-Browser (Desktop) bzw. mit Hinweis (Handy).
   Future<void> _openResult() async {
     if (_resultFiles.isEmpty) return;
+    final first = _resultFiles.first;
+    if (p.extension(first).toLowerCase() == '.html') {
+      try {
+        if (Platform.isWindows) {
+          await Process.run('cmd', ['/c', 'start', '', first]);
+          return;
+        } else if (Platform.isLinux) {
+          await Process.run('xdg-open', [first]);
+          return;
+        }
+      } catch (_) {}
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Bitte die HTML-Datei in der Dateien-App antippen – '
+            'sie öffnet dann im Browser.'),
+        duration: Duration(seconds: 5),
+      ));
+      return;
+    }
     await openPathsInApp(context, _resultFiles);
   }
 
@@ -572,6 +636,10 @@ class PdfToImagePageState extends State<PdfToImagePage> {
                       value: OutputFormat.jpeg,
                       label: Text('JPEG'),
                       icon: Icon(Icons.photo)),
+                  ButtonSegment(
+                      value: OutputFormat.html,
+                      label: Text('Zoom'),
+                      icon: Icon(Icons.travel_explore)),
                 ],
                 selected: {_format},
                 onSelectionChanged: _busy
@@ -580,9 +648,16 @@ class PdfToImagePageState extends State<PdfToImagePage> {
               ),
               const SizedBox(height: 8),
               Text(
-                _format == OutputFormat.png
-                    ? 'PNG: verlustfrei, beste Schärfe, größere Dateien.'
-                    : 'JPEG: kleinere Dateien, bei Text leichte Artefakte.',
+                switch (_format) {
+                  OutputFormat.png =>
+                    'PNG: verlustfrei, beste Schärfe, größere Dateien.',
+                  OutputFormat.jpeg =>
+                    'JPEG: kleinere Dateien, bei Text leichte Artefakte.',
+                  OutputFormat.html =>
+                    'Zoom (HTML): eine Datei mit Karten-Zoom – ideal für '
+                        'riesige Seiten (Poster, Zeitleisten). Öffnet im '
+                        'Browser, zoomt sofort scharf ohne Wartezeit.',
+                },
                 style: TextStyle(
                     fontSize: 12,
                     color: Theme.of(context).colorScheme.outline),
@@ -685,6 +760,9 @@ class PdfToImagePageState extends State<PdfToImagePage> {
             ],
           ),
         ),
+        // Streifen-Aufteilung betrifft nur Bild-Ausgaben; die Zoom-HTML
+        // zeigt riesige Seiten ohnehin in voller Schärfe.
+        if (_format != OutputFormat.html)
         _Card(
           title: '6. Große Seite aufteilen',
           child: Column(
