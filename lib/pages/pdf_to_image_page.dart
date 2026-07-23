@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:math' as math;
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
@@ -19,12 +21,14 @@ enum OutputFormat { png, jpeg }
 
 /// Kodiert die von pdfium gelieferten BGRA-Rohpixel in einem Hintergrund-
 /// Isolate zu PNG bzw. JPEG (hält die UI während großer Seiten flüssig).
-Uint8List _encodePage((int, int, Uint8List, bool, int) e) {
-  final (width, height, pixels, isPng, quality) = e;
+/// Die Pixel kommen als [TransferableTypedData] – so wandern sie ohne zweite
+/// Kopie in den Isolate (spart bei großen Seiten viel Speicher).
+Uint8List _encodePage((int, int, TransferableTypedData, bool, int) e) {
+  final (width, height, transferable, isPng, quality) = e;
   final image = img.Image.fromBytes(
     width: width,
     height: height,
-    bytes: pixels.buffer,
+    bytes: transferable.materialize(),
     order: img.ChannelOrder.bgra,
   );
   return isPng ? img.encodePng(image) : img.encodeJpg(image, quality: quality);
@@ -55,6 +59,11 @@ class PdfToImagePageState extends State<PdfToImagePage> {
 
   bool _busy = false;
   bool _dragging = false;
+  bool _cancelRequested = false;
+  // Wurde auf dem Handy mind. eine Seite wegen ihrer Größe herunterskaliert?
+  // (Dann Hinweis auf die schärfere Windows-Desktop-App zeigen.)
+  bool _largePageDownscaled = false;
+  PdfPageRenderCancellationToken? _renderToken;
   double _progress = 0;
   String _statusText = '';
   final List<String> _resultFiles = [];
@@ -169,8 +178,22 @@ class PdfToImagePageState extends State<PdfToImagePage> {
     final ext = isPng ? 'png' : 'jpg';
     final pad = _pageCount >= 100 ? 3 : 2;
 
+    // Speicher-/Sicherheitsbudget für den Rohbild-Puffer (BGRA = 4 Byte/Pixel).
+    // pdfium legt die Seite als EINEN zusammenhängenden Puffer an. Auf 32-bit-
+    // Geräten (Handy) ist eine Uint8List max. 1073741823 Byte (≈ 1 GB) lang –
+    // größer ⇒ „length must be in the range [0, 1073741823]". Auf dem Desktop
+    // (64-bit) gibt es diese Grenze nicht, dort ist der RAM das Limit → deutlich
+    // großzügiger, damit sehr große Seiten maximal scharf werden.
+    final isDesktop =
+        Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+    final int maxRasterBytes = isDesktop
+        ? 1536 * 1024 * 1024 // ~1,5 GB  → bis ~19000×19000 px (viel RAM nötig)
+        : 256 * 1024 * 1024; //  256 MB  → bis ~8000×8000 px (32-bit-Handy-Limit)
+
     setState(() {
       _busy = true;
+      _cancelRequested = false;
+      _largePageDownscaled = false;
       _progress = 0;
       _resultFiles.clear();
       _statusText = 'Wird vorbereitet …';
@@ -180,29 +203,66 @@ class PdfToImagePageState extends State<PdfToImagePage> {
     try {
       doc = await PdfDocument.openFile(_pdfPath!);
       for (int idx = 0; idx < targetPages.length; idx++) {
+        if (_cancelRequested) break;
         final pageNo = targetPages[idx];
-        setState(() => _statusText =
-            'Seite $pageNo … (${idx + 1}/${targetPages.length})');
-
         final page = doc.pages[pageNo - 1];
+
+        // Zielgröße in Pixeln aus dem DPI. Ist die Seite so groß, dass der
+        // Puffer das Budget sprengt, gleichmäßig herunterskalieren, bis er
+        // passt (verhindert Absturz UND endloses Laden bei riesigen Seiten).
+        // Es wird dann die höchste noch mögliche Auflösung verwendet – das ist
+        // schärfer, als den DPI von Hand abzusenken.
+        double fullW = page.width * _dpi / 72.0;
+        double fullH = page.height * _dpi / 72.0;
+        int effDpi = _dpi;
+        final double rasterBytes = fullW * fullH * 4;
+        if (rasterBytes > maxRasterBytes) {
+          final scale = math.sqrt(maxRasterBytes / rasterBytes);
+          fullW *= scale;
+          fullH *= scale;
+          effDpi = (_dpi * scale).floor();
+          if (!isDesktop) _largePageDownscaled = true;
+        }
+        if (fullW < 1) fullW = 1;
+        if (fullH < 1) fullH = 1;
+
+        setState(() {
+          _progress = idx / targetPages.length;
+          _statusText = effDpi < _dpi
+              ? 'Seite $pageNo wird gerendert … (${idx + 1}/${targetPages.length})\n'
+                  'Sehr große Seite – auf $effDpi dpi begrenzt (max. Auflösung).'
+              : 'Seite $pageNo wird gerendert … (${idx + 1}/${targetPages.length})';
+        });
+
+        final token = page.createCancellationToken();
+        _renderToken = token;
         final rendered = await page.render(
-          fullWidth: page.width * _dpi / 72.0,
-          fullHeight: page.height * _dpi / 72.0,
+          fullWidth: fullW,
+          fullHeight: fullH,
           backgroundColor: 0xFFFFFFFF,
+          cancellationToken: token,
         );
+        _renderToken = null;
         if (rendered == null) {
+          if (_cancelRequested) break;
           throw Exception('Seite $pageNo konnte nicht gerendert werden.');
         }
-        // Rohpixel (BGRA) kopieren, natives Bild sofort freigeben, dann im
-        // Hintergrund-Isolate zu PNG/JPEG kodieren.
+
+        // Rohpixel (BGRA) in einen transferierbaren Puffer packen, das native
+        // Bild sofort freigeben, dann im Hintergrund-Isolate kodieren.
         final params = (
           rendered.width,
           rendered.height,
-          Uint8List.fromList(rendered.pixels),
+          TransferableTypedData.fromList([rendered.pixels]),
           isPng,
           _jpegQuality,
         );
         rendered.dispose();
+
+        if (mounted) {
+          setState(() => _statusText =
+              'Seite $pageNo wird gespeichert … (${idx + 1}/${targetPages.length})');
+        }
         final bytes = await compute(_encodePage, params);
 
         final fileName =
@@ -212,13 +272,25 @@ class PdfToImagePageState extends State<PdfToImagePage> {
         _resultFiles.add(outPath);
         setState(() => _progress = (idx + 1) / targetPages.length);
       }
-      await LicenseService.instance.registerConversion();
-      setState(() => _statusText =
-          '✓ Fertig: ${_resultFiles.length} Bild(er) in:\n$outDir');
+      if (_cancelRequested) {
+        setState(() => _statusText = _resultFiles.isEmpty
+            ? 'Abgebrochen.'
+            : 'Abgebrochen – ${_resultFiles.length} Bild(er) gespeichert in:\n$outDir');
+      } else {
+        await LicenseService.instance.registerConversion();
+        final hint = _largePageDownscaled
+            ? '\n\nℹ️ Sehr große Seite(n) wurden zum Speichern verkleinert. '
+                'Die Windows-Desktop-App von „PDF zu Bild" kann solche Seiten in '
+                'deutlich höherer Auflösung (schärfer) umwandeln.'
+            : '';
+        setState(() => _statusText =
+            '✓ Fertig: ${_resultFiles.length} Bild(er) in:\n$outDir$hint');
+      }
     } catch (e) {
       _showError('Fehler beim Umwandeln: $e');
       setState(() => _statusText = 'Abgebrochen wegen Fehler.');
     } finally {
+      _renderToken = null;
       await doc?.dispose();
       if (mounted) setState(() => _busy = false);
     }
@@ -519,7 +591,25 @@ class PdfToImagePageState extends State<PdfToImagePage> {
         const RemainingFreeBadge(),
         if (_busy) ...[
           const SizedBox(height: 12),
-          LinearProgressIndicator(value: _progress),
+          // Vor der ersten fertigen Seite ist der Fortschritt noch 0 → laufender
+          // (indeterminater) Balken, damit große Einzelseiten nicht „eingefroren"
+          // wirken; danach füllt er sich pro Seite.
+          LinearProgressIndicator(value: _progress == 0 ? null : _progress),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _cancelRequested
+                  ? null
+                  : () {
+                      setState(() => _cancelRequested = true);
+                      _renderToken?.cancel();
+                    },
+              icon: const Icon(Icons.close),
+              label:
+                  Text(_cancelRequested ? 'Wird abgebrochen …' : 'Abbrechen'),
+            ),
+          ),
         ],
         if (_statusText.isNotEmpty) ...[
           const SizedBox(height: 12),
