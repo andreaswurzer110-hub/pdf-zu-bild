@@ -1,10 +1,16 @@
 # Snap bauen & in den Snap Store veröffentlichen (GitHub Actions = Cloud-Linux).
 #
-# Veröffentlicht wird NUR manuell per "Run workflow" (Channel wählbar, Default
-# edge). Bewusst NICHT an v*-Tags gekoppelt: die lösen play-upload.yml (Android)
-# aus, und der Snap soll nicht bei jedem Android-Release ungeprüft auf stable
-# springen. Zum Testen edge wählen; wenn edge auf Linux verifiziert ist, den
-# Workflow erneut mit Channel stable starten.
+# AUSLÖSER
+#   - Veröffentlichtes GitHub-Release → baut + veröffentlicht nach EDGE.
+#   - "Run workflow" (manuell) → Channel frei wählbar; STABLE gibt es nur so,
+#     also nur bewusst und von Hand.
+#
+#   GEÄNDERT 2026-08-23 (Andi): Ein Release löst den Snap jetzt automatisch mit
+#   aus – parallel zu play-upload.yml, das die AAB in den internen Test schiebt.
+#   Beides sind Testkanäle, ein Release soll auf allen Plattformen zum Testen
+#   bereitstehen, ohne dass man je Plattform von Hand nachfassen muss.
+#   Die frühere Sorge („Snap springt bei jedem Android-Release ungeprüft auf
+#   stable") ist damit gegenstandslos: ein Release geht nach edge, nie stable.
 #
 # VORAUSSETZUNG (einmalig – siehe snap/README.md):
 #   1. Snap-Name `pdf-zu-bild-und-reader` im Store registrieren.
@@ -16,6 +22,8 @@
 name: Snap-Build
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       release:
