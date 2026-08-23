@@ -81,3 +81,20 @@ CMake 4.3 funktioniert:
    (auf 3.5 angehoben). Diese Datei liegt im pub-Cache und muss nach einem
    pdfx-Update ggf. erneut angepasst werden, falls der Fehler
    „Compatibility with CMake < 3.5 has been removed" auftritt.
+
+## Offen: KI-Kennzeichnung im Info-Dialog
+
+Beim nächsten Anfassen dieser App mit einbauen — Vorgabe von Andi, gilt für **alle**
+seine Apps:
+
+- Zeile **Ersteller: Andreas Wurzer**
+- Zeile **Genutzte Werkzeuge: Claude Code**
+- Ein Satz, dass Code und Texte teilweise KI-generiert und vom Ersteller geprüft sind
+
+**Warum:** Andi rechnet damit, dass KI-Inhalte künftig gekennzeichnet werden müssen,
+und will das vorbeugend drin haben statt erst dann, wenn es verlangt wird.
+
+**Stand 2026-08-23: Diese App hat noch KEINEN Info-Dialog** — der muss zuerst angelegt
+werden. Das ist eine kleine Funktion, kein Einzeiler. Fertige Muster zum Abschauen:
+`Wecker_App/.../ui/AboutDialog.kt` (Kotlin/Compose) und `_showAbout` in
+`WinLoginApp/lib/screens/home_screen.dart` (Flutter).
